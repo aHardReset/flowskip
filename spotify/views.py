@@ -7,6 +7,7 @@ from user.models import Users
 from spotify.snippets import construct_state, deconstruct_state, update_data_changed
 from spotify.api import auth_manager, get_current_user, delete_cached_token
 from spotify.models import SpotifyBasicData
+from flowskip import response_msgs
 
 ALLOWED_REDIRECTS = ('')
 
@@ -18,24 +19,21 @@ class AuthenticateUser(APIView):
             session_key = request.GET['session_key']
             redirect_url = request.GET['redirect_url']
             force_authentication = request.GET.get("force_authentication")
-        except KeyError as key:
-            response['msg'] = f'not {key} provided'
-            return Response(response, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
             user = Users.objects.get(pk=session_key)
+        except KeyError as key:
+            response['msg'] = response_msgs.key_error(key)
+            return Response(response, status=status.HTTP_400_BAD_REQUEST) 
         except Users.DoesNotExist:
-            response['msg'] = f'user with session_key: {session_key} not found'
+            response['msg'] = response_msgs.user_does_not_exists(session_key)
             return Response(response, status=status.HTTP_404_NOT_FOUND)
         
         if not user.spotify_basic_data is None and not force_authentication:
-            response['msg'] = f'user with session_key: {session_key} already authenticated'
+            response['msg'] = response_msgs.user_already_exists(session_key)
             return Response(response, status=status.HTTP_208_ALREADY_REPORTED)
-
         
         state = construct_state(session_key, redirect_url)
         authorize_url = auth_manager(state).get_authorize_url()
-        response['msg'] = 'url to authorize user generated'
+        response['msg'] = response_msgs.authenticate_url_generated(redirect_url)
         response['authorize_url'] = authorize_url
 
         return Response(response, status=status.HTTP_200_OK)
@@ -80,8 +78,7 @@ class SpotifyOauthRedirect(APIView):
             tokens = new_tokens
         
         if 'error' in data.keys():
-            response['msg'] = 'spotify server unavailable'
-            return Response(response, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            return HttpResponseRedirect(redirect_url+f'?status={status.HTTP_503_SERVICE_UNAVAILABLE}')
         del user_auth_manager
 
         users = Users.objects.filter(pk=session_key)
@@ -91,6 +88,7 @@ class SpotifyOauthRedirect(APIView):
             each_spotify_basic_data = each_user['spotify_basic_data']
             if each_spotify_basic_data == data['id']:
                 _ = users.delete()
+                delete_cached_token(session_key)
                 return HttpResponseRedirect(redirect_url+ f'?status={status.HTTP_208_ALREADY_REPORTED}&session_key={each_session}')
         
         user = users[0]
@@ -109,7 +107,7 @@ class SpotifyOauthRedirect(APIView):
                 'refresh_token',
                 'access_token_expires_at'
             ])
-            update_data_changed(spotify_basic_data, data)
+            spotify_basic_data = update_data_changed(spotify_basic_data, data)
         except SpotifyBasicData.DoesNotExist:
             try:
                 image_url = data['images'][0].get("url")

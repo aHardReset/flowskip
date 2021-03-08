@@ -1,11 +1,6 @@
 from datetime import datetime, timedelta, timezone
+import time
 import string
-
-data = {'non-existent' : 12}
-try:
-    a = data['non-existsdsdent']
-except KeyError:
-    print('ok')
 
 """
 print(string)
@@ -25,3 +20,6 @@ print("Then ",then)
 
 print(now>then)
 """
+
+
+print(datetime.now() + timedelta(seconds=1615152699 - datetime.now().timestamp()))

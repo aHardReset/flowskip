@@ -14,7 +14,7 @@ def construct_state(session_key:str, redirect_url:str, **kwargs) -> str:
 def deconstruct_state(query: str) -> dict:
     return parse.parse_qs(query)
 
-def update_data_changed(spotify_basic_data: object ,data: dict):
+def update_data_changed(spotify_basic_data: object ,data: dict)-> object:
     if data['display_name'] != spotify_basic_data.display_name:
             spotify_basic_data.display_name = data['display_name']
             spotify_basic_data.save(update_fields=['display_name'])
@@ -33,3 +33,5 @@ def update_data_changed(spotify_basic_data: object ,data: dict):
         if not spotify_basic_data.image_url is None:
             spotify_basic_data.image_url = None
             spotify_basic_data.save(update_fields=['image_url'])
+
+    return spotify_basic_data

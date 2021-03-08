@@ -4,7 +4,7 @@ from os import environ
 from os import remove
 import random
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 from time import mktime
 
 import spotipy
@@ -27,7 +27,6 @@ def auth_manager(state:str, username:str = '')->spotipy.SpotifyOAuth:
     )
 
 def delete_cached_token(username:str)->None:
-    import pdb; pdb.set_trace()
     try:
         file = settings.BASE_DIR / ('.cache-' + username)
         remove(file)
@@ -54,7 +53,7 @@ def get_tokens(tokens: dict)->dict:
         tokens = user_auth_manager.get_cached_token()
         delete_cached_token(username)
     
-    tokens['expires_at'] = datetime.fromtimestamp(tokens['expires_at'])
+    tokens['expires_at'] = datetime.now() + timedelta(seconds=tokens['expires_at'] - datetime.now().timestamp())
     return tokens
 
 def get_current_user(tokens: dict)-> tuple:
@@ -62,6 +61,14 @@ def get_current_user(tokens: dict)-> tuple:
     new_tokens = get_tokens(tokens)
     sp = spotipy.Spotify(auth=new_tokens['access_token'])
     data = sp.current_user()
+    if new_tokens == tokens:
+        new_tokens = None
+    return (data, new_tokens)
+
+def get_current_playback(tokens: dict) -> tuple:
+    new_tokens = get_tokens(tokens)
+    sp = spotipy.Spotify(auth=new_tokens['access_token'])
+    data = sp.current_playback()
     if new_tokens == tokens:
         new_tokens = None
     return (data, new_tokens)

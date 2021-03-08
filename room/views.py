@@ -8,6 +8,8 @@ from rest_framework.response import Response
 from room.serializers import CreateRoomSerializer, RoomSerializer
 from room.models import Rooms
 from user.models import Users, PaidUsers, Commerces
+from spotify.api import get_current_playback
+from flowskip import response_msgs
 # Create your views here.
 
 class CreatePersonal(APIView):
@@ -18,40 +20,30 @@ class CreatePersonal(APIView):
             session_key = request.data['session_key']
             votes_to_skip = request.data['votes_to_skip']
             guests_can_pause = request.data['guests_can_pause']
+            session = Session.objects.get(pk=session_key)
+            user = Users.objects.get(pk=session)
+            spotify_basic_data = user.spotify_basic_data
+            if spotify_basic_data is None:
+                response['msg'] = response_msgs.user_not_authenticated(session_key)
+                return Response(response, status=status.HTTP_403_FORBIDDEN)
         except KeyError as key:
-            response['msg'] = f'not {key} found in request'
+            response['msg'] = response_msgs.key_error(key)
             return Response(response, status=status.HTTP_400_BAD_REQUEST)
+        except Session.DoesNotExist:
+            response['msg'] = response_msgs.session_does_not_exists(session_key)
+            return Response(response, status=status.HTTP_404_NOT_FOUND)
+        except Users.DoesNotExist:
+            response['msg'] = response_msgs.user_does_not_exists(session_key)
+            return Response(response, status=status.HTTP_404_NOT_FOUND)
         
         serializer = CreateRoomSerializer
         serializer = serializer(data=request.data)
         if not serializer.is_valid():
-            response['msg'] = 'data posted not valid'
+            response['msg'] = response_msgs.serializer_not_valid()
             return Response(response, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            session = Session.objects.get(pk=session_key)
-            user = Users.objects.get(pk=session)
-            spotify_basic_data = user.spotify_basic_data
-        except Session.DoesNotExist:
-            response['msg'] = f'session with session_key: {session_key} not found'
-            return Response(response, status=status.HTTP_404_NOT_FOUND)
-        except Users.DoesNotExist:
-            response['msg'] = f'user with session_key: {session_key} not found'
-            return Response(response, status=status.HTTP_404_NOT_FOUND)
-
-        if spotify_basic_data is None:
-            response['msg'] = f'user with session_key: {session_key} not authenticated'
-            return Response(response, status=status.HTTP_403_FORBIDDEN)
-        
-        user_rooms = Rooms.objects.filter(pk=user)
-        if user_rooms.exists():
-            user_room = user_rooms[0]
-            response['msg'] = 'this user owns a room'
-            response['code'] = user_room.code
-            return Response(response, status=status.HTTP_208_ALREADY_REPORTED)
         
         if not user.room is None:
-            response['msg'] = 'this user is in a room already'
+            response['msg'] = response_msgs.user_already_in_room(user.room.code)
             response['code'] = user.room.code
             return Response(response, status=status.HTTP_208_ALREADY_REPORTED)
         
@@ -76,7 +68,7 @@ class CreatePersonal(APIView):
         room.save()
         user.room = room
         user.save(update_fields=['room'])
-        response['msg'] = f'room created'
+        response['msg'] = response_msgs.room_created()
         response['code'] = room.code
         return Response(response, status=status.HTTP_200_OK)
 
@@ -86,35 +78,32 @@ class CreateCommerce(APIView):
         
         try:
             session_key = request.data['session_key']
+            session = Session.objects.get(pk=session_key)
+            user = Users.objects.get(pk=session)
+            spotify_basic_data = user.spotify_basic_data
+            if spotify_basic_data is None:
+                response['msg'] = response_msgs.user_not_authenticated(session_key)
+                return Response(response, status=status.HTTP_403_FORBIDDEN)
         except KeyError as key:
-            response['msg'] = f'not {key} found in request'
+            response['msg'] = response_msgs.key_error(key)
             return Response(response, status=status.HTTP_400_BAD_REQUEST)
+        except Session.DoesNotExist:
+            response['msg'] = response_msgs.session_does_not_exists(session_key)
+            return Response(response, status=status.HTTP_404_NOT_FOUND)
+        except Users.DoesNotExist:
+            response['msg'] = response_msgs.user_does_not_exists(session_key)
+            return Response(response, status=status.HTTP_404_NOT_FOUND)
         
         serializer = CreateRoomSerializer
         serializer = serializer(data=request.data)
         if not serializer.is_valid():
-            response['msg'] = 'data posted not valid'
+            response['msg'] = response_msgs.serializer_not_valid()
             return Response(response, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            session = Session.objects.get(pk=session_key)
-            user = Users.objects.get(pk=session)
-            spotify_basic_data = user.spotify_basic_data
-        except Session.DoesNotExist:
-            response['msg'] = f'session with session_key: {session_key} not found'
-            return Response(response, status=status.HTTP_404_NOT_FOUND)
-        except Users.DoesNotExist:
-            response['msg'] = f'user with session_key: {session_key} not found'
-            return Response(response, status=status.HTTP_404_NOT_FOUND)
-
-        if spotify_basic_data is None:
-            response['msg'] = f'user with session_key: {session_key} not authenticated'
-            return Response(response, status=status.HTTP_403_FORBIDDEN)
-        
-        try:
             paid_details = Commerces.objects.get(pk=spotify_basic_data.id)
         except Commerces.DoesNotExist:
-            response['msg'] = f'user with session_key: {session_key} not has commerce'
+            response['msg'] = response_msgs.user_does_not_have_a_commerce(session_key)
             return Response(response, status=status.HTTP_402_PAYMENT_REQUIRED)
 
         # ! Add the geolocalization filter
@@ -130,7 +119,7 @@ class CreateCommerce(APIView):
                 'guests_can_pause',
                 'votes_to_skip',
             ])
-            response['msg'] = f'Room for user with session_key: {session_key} updated'
+            response['msg'] = response_msgs.commerce_room_updated(session_key)
             return Response(response, status=status.HTTP_208_ALREADY_REPORTED)
         
         room = Rooms(
@@ -140,7 +129,7 @@ class CreateCommerce(APIView):
                 votes_to_skip = serializer.data['votes_to_skip'],
             )
         room.save()
-        response['msg'] = f'New room for user with session_key: {session_key} created'
+        response['msg'] = response_msgs.room_created()
         return Response(response, status=status.HTTP_201_CREATED)
 
 class Join(APIView):
@@ -150,25 +139,24 @@ class Join(APIView):
         try:
             session_key = request.data['session_key']
             code = request.data['code']
-        except KeyError as key:
-            response['msg'] = f'not {key} found in request'
-            return Response(response, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
             session = Session.objects.get(pk=session_key)
             user = Users.objects.get(pk=session)
+            if not user.room is None:
+                response['msg'] = f'user with session_key: {session_key} is already in a room with code: {user.room.code}'
+                return Response(response, status=status.HTTP_208_ALREADY_REPORTED)
+            room = Rooms.objects.get(code=code)
+        except KeyError as key:
+            response['msg'] = response_msgs.key_error()
+            return Response(response, status=status.HTTP_400_BAD_REQUEST)
         except Session.DoesNotExist:
-            response['msg'] = f'session with session_key: {session_key} not found'
+            response['msg'] = response_msgs.session_does_not_exists(session_key)
             return Response(response, status=status.HTTP_404_NOT_FOUND)
         except Users.DoesNotExist:
-            response['msg'] = f'user with session_key: {session_key} not found'
+            response['msg'] = response_msgs.user_does_not_exists(session_key)
+            return Response(response, status=status.HTTP_404_NOT_FOUND)  
+        except Rooms.DoesNotExist:
+            response['msg'] = response_msgs.room_does_not_exists(code)
             return Response(response, status=status.HTTP_404_NOT_FOUND)
-        
-        rooms = Rooms.objects.filter(code=code)
-        if not rooms.exists():
-            response['msg'] = f'room with code: {code} does not exists'
-            return Response(response, status=status.HTTP_404_NOT_FOUND)
-        room = rooms[0]
 
         is_commerce = Commerces.objects.filter(exclusive_code=room.code).exists()
         if is_commerce:
@@ -185,15 +173,13 @@ class Participants(APIView):
 
         try:
             code = request.GET['code']
+            room = Rooms.objects.get(code=code)
         except KeyError as key:
-            response['msg'] = f'not {key} found in request'
+            response['msg'] = response_msgs.key_error(key)
             return Response(response, status=status.HTTP_400_BAD_REQUEST)
-
-        rooms = Rooms.objects.filter(code=code)
-        if not rooms.exists():
-            response['msg'] = f'room with code: {code} does not exists'
+        except Rooms.DoesNotExist:
+            response['msg'] = response_msgs.room_does_not_exists(code)
             return Response(response, status=status.HTTP_404_NOT_FOUND)
-        room = rooms[0]
 
         response['users'] = []
         users = Users.objects.filter(room=room)
@@ -210,7 +196,9 @@ class Participants(APIView):
                     'is_authenticated': True,
                     'id': user.session.session_key[-6:],
                     'display_name': spotify_basic_data.display_name,
-                    'image_url': spotify_basic_data.image_url
+                    'image_url': spotify_basic_data.image_url,
+                    'external-url' : spotify_basic_data.external_url,
+                    'product': spotify_basic_data.product
                 }
             
             response['users'].append(participant)
@@ -224,29 +212,24 @@ class Details(APIView):
         try:
             session_key = request.GET["session_key"]
             code = request.GET["code"]
-        except KeyError as key:
-            response['msg'] = f"not {key} provided in request"
-            return Response(response, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
             session = Session.objects.get(pk=session_key)
-        except Session.DoesNotExist:
-            response['msg'] = f'session {session_key} not found'
-            return Response(response, status=status.HTTP_200_OK)
-
-        try:
             user = Users.objects.get(pk=session)
+            room = user.room
+            if room is None:
+                response['msg'] = f'the user with session_key: {session_key} is not associated to any room'
+                return Response(response, status=status.HTTP_404_NOT_FOUND)
+            if room.code != code:
+                response['msg'] = f'code provided is incorrect, maybe the room has changed'
+                return Response(response, status=status.HTTP_426_UPGRADE_REQUIRED)
+        except KeyError as key:
+            response['msg'] = response_msgs.key_error(key)
+            return Response(response, status=status.HTTP_400_BAD_REQUEST)
+        except Session.DoesNotExist:
+            response['msg'] = response_msgs.session_does_not_exists(session_key)
+            return Response(response, status=status.HTTP_200_OK)
         except Users.DoesNotExist:
-            response['msg'] = f'user with session_key: {session_key} not found'
+            response['msg'] = response_msgs.user_does_not_exists(session_key)
             return Response(response, status=status.HTTP_404_NOT_FOUND)
-        
-        room = user.room
-        if room is None:
-            response['msg'] = f'the user with session_key: {session_key} is not associated to any room'
-            return Response(response, status=status.HTTP_404_NOT_FOUND)
-        if room.code != code:
-            response['msg'] = f'code provided is incorrect, maybe the room has changed'
-            return Response(response, status=status.HTTP_426_UPGRADE_REQUIRED)
         
         response = RoomSerializer(room).data
         response['user_is_host'] = room.host.session.session_key == session_key
@@ -258,25 +241,20 @@ class Leave(APIView):
 
         try:
             session_key = request.data["session_key"]
-        except KeyError as key:
-            response['msg'] = f"not {key} provided in request"
-            return Response(response, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
             session = Session.objects.get(pk=session_key)
-        except Session.DoesNotExist:
-            response['msg'] = f'session {session_key} not found'
-            return Response(response, status=status.HTTP_200_OK)
-
-        try:
             user = Users.objects.get(pk=session)
+            if user.room is None:
+                response['msg'] = f"user with session_key: {session_key} does not have a room"
+                return Response(response, status=status.HTTP_204_NO_CONTENT)
+        except KeyError as key:
+            response['msg'] = response_msgs.key_error(key)
+            return Response(response, status=status.HTTP_400_BAD_REQUEST)
+        except Session.DoesNotExist:
+            response['msg'] = response_msgs.session_does_not_exists(session_key)
+            return Response(response, status=status.HTTP_200_OK)   
         except Users.DoesNotExist:
-            response['msg'] = f'user with session_key: {session_key} not found'
+            response['msg'] = response_msgs.user_does_not_exists(session_key)
             return Response(response, status=status.HTTP_404_NOT_FOUND)
-
-        if user.room is None:
-            response['msg'] = f"user with session_key: {session_key} does not have a room"
-            return Response(response, status=status.HTTP_204_NO_CONTENT)
         
         if user.room.host.session.session_key == session_key:
             room = Rooms.objects.filter(host=user).delete()
@@ -287,4 +265,3 @@ class Leave(APIView):
         user.save(update_fields=['room'])
         response['msg'] = f'user with session_key:{session_key} leave the room'
         return Response(response, status=status.HTTP_204_NO_CONTENT)
-

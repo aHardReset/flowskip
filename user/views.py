@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from user.models import Users, PaidUsers, Commerces
 from spotify.api import get_current_user
 from spotify.snippets import update_data_changed
+from flowskip import response_msgs
 
 class StartSession(APIView):
     # Must be post
@@ -18,34 +19,31 @@ class StartSession(APIView):
         request.session.create()
         session_key = request.session.session_key
         
-        response['msg'] = 'session_started'
+        response['msg'] = response_msgs.session_started(session_key)
         response['session_key'] = session_key
         return Response(response, status=status.HTTP_201_CREATED)
 
 class Create(APIView):
     def post(self, request, format=None):
-        
         response = {}
 
         try:
             session_key = request.data["session_key"]
-        except KeyError as key:
-            response['msg'] = f"not {key} provided in request"
-            return Response(response, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
             session = Session.objects.get(pk=session_key)
+        except KeyError as key:
+            response['msg'] = response_msgs.key_error(key)
+            return Response(response, status=status.HTTP_400_BAD_REQUEST)
         except Session.DoesNotExist:
-            response['msg'] = f'session_key: {session_key} not found'
+            response['msg'] = response_msgs.session_does_not_exists(session_key)
             return Response(response, status=status.HTTP_404_NOT_FOUND)
         
         if Users.objects.filter(pk=session).exists():
-            response['msg'] = f"user with session_key: {session_key} already exists"
+            response['msg'] = response_msgs.user_already_exists(session_key)
             return Response(response, status=status.HTTP_409_CONFLICT)
         
         user = Users(pk=session)
         user.save()
-        response['msg'] = 'new user created'
+        response['msg'] = response_msgs.user_created(session_key)
         return Response(response, status=status.HTTP_201_CREATED)
 
 class Delete(APIView):
@@ -54,18 +52,16 @@ class Delete(APIView):
 
         try:
             session_key = request.data["session_key"]
-        except KeyError as key:
-            response['msg'] = f"not {key} provided in request"
-            return Response(response, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
             session = Session.objects.get(pk=session_key)
+        except KeyError as key:
+            response['msg'] = response_msgs.key_error(key)
+            return Response(response, status=status.HTTP_400_BAD_REQUEST)
         except Session.DoesNotExist:
-            response['msg'] = f'session {session_key} not found'
+            response['msg'] = response_msgs.session_does_not_exists(session_key)
             return Response(response, status=status.HTTP_404_NOT_FOUND)
         
         user = Users.objects.filter(pk=session).delete()
-        response['msg'] = f"{user[0]} users deleted with session_key: {session_key}"
+        response['msg'] = response_msgs.user_deleted(user[0], session_key)
         return Response(response, status=status.HTTP_204_NO_CONTENT)
 
 class Status(APIView):
@@ -74,23 +70,19 @@ class Status(APIView):
 
         try:
             session_key = request.GET["session_key"]
-        except KeyError as key:
-            response['msg'] = f"not {key} provided in request"
-            return Response(response, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
             session = Session.objects.get(pk=session_key)
-        except Session.DoesNotExist:
-            response['msg'] = f'session {session_key} not found'
-            return Response(response, status=status.HTTP_200_OK)
-
-        try:
             user = Users.objects.get(pk=session)
             expire_date = user.session.expire_date
             response['session_key'] = session_key
             response['user'] = f'user found and will be live up to {expire_date}'
+        except KeyError as key:
+            response['msg'] = response_msgs.key_error(key)
+            return Response(response, status=status.HTTP_400_BAD_REQUEST)
+        except Session.DoesNotExist:
+            response['msg'] = response_msgs.session_does_not_exists(session_key)
+            return Response(response, status=status.HTTP_200_OK)
         except Users.DoesNotExist:
-            response['msg'] = f"user with session_key: {session_key} not found"
+            response['msg'] = response_msgs.user_does_not_exists(session_key)
             return Response(response, status=status.HTTP_200_OK)
         
         spotify_basic_data = not user.spotify_basic_data is None
@@ -110,25 +102,21 @@ class Details(APIView):
 
         try:
             session_key = request.GET["session_key"]
-        except KeyError as key:
-            response['msg'] = f"not {key} provided in request"
-            return Response(response, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
             session = Session.objects.get(pk=session_key)
-        except Session.DoesNotExist:
-            response['msg'] = f'session {session_key} not found'
-            return Response(response, status=status.HTTP_404_NOT_FOUND)
-
-        try:
             user = Users.objects.get(pk=session)
+        except KeyError as key:
+            response['msg'] = response_msgs.key_error(key)
+            return Response(response, status=status.HTTP_400_BAD_REQUEST)
+        except Session.DoesNotExist:
+            response['msg'] = response_msgs.session_does_not_exists(session_key)
+            return Response(response, status=status.HTTP_404_NOT_FOUND)  
         except Users.DoesNotExist:
-            response['msg'] = f"user with session_key: {session_key} not found"
+            response['msg'] = response_msgs.user_does_not_exists(session_key)
             return Response(response, status=status.HTTP_404_NOT_FOUND)
 
         spotify_basic_data = user.spotify_basic_data
         if spotify_basic_data is None:
-            response['msg'] = f"user with session_key: {session_key} is not authenticated"
+            response['msg'] = response_msgs.user_not_authenticated(session_key)
             return Response(response, status=status.HTTP_401_UNAUTHORIZED)
         
         tokens = {
