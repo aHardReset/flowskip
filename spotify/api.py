@@ -52,8 +52,7 @@ def get_tokens(tokens: dict)->dict:
         user_auth_manager.refresh_access_token(tokens['refresh_token'])
         tokens = user_auth_manager.get_cached_token()
         delete_cached_token(username)
-    
-    tokens['expires_at'] = datetime.now() + timedelta(seconds=tokens['expires_at'] - datetime.now().timestamp())
+    tokens['expires_at'] = datetime.utcfromtimestamp(tokens['expires_at'])
     return tokens
 
 def get_current_user(tokens: dict)-> tuple:
@@ -69,6 +68,12 @@ def get_current_playback(tokens: dict) -> tuple:
     new_tokens = get_tokens(tokens)
     sp = spotipy.Spotify(auth=new_tokens['access_token'])
     data = sp.current_playback()
-    if new_tokens == tokens:
-        new_tokens = None
-    return (data, new_tokens)
+    try:
+        del data['device']
+        del data['context']
+        del data['actions']
+        del data['timestamp']
+    finally:
+        if new_tokens == tokens:
+            new_tokens = None
+        return (data, new_tokens)

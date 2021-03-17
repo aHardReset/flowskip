@@ -5,29 +5,27 @@ from django.urls import path
 from user import views
 
 urlpatterns = [
-    path(
-        'start-session',
-        view=views.StartSession.as_view(),
-        name='start-session'
-    ),
+    # User Manager
     path(
         route='create',
-        view=views.Create.as_view(),
+        view=views.UserManager.as_view(),
         name='create'
     ),
     path(
         'delete',
-        view=views.Delete.as_view(),
+        view=views.UserManager.as_view(),
         name='delete'
     ),
     path(
-        'status',
-        view=views.Status.as_view(),
-        name='status'
-    ),
-    path(
         'details',
-        view=views.Details.as_view(),
+        view=views.UserManager.as_view(),
         name='details'
+    ),
+
+    # Session Manager
+    path(
+        'session/start',
+        view=views.SessionManager.as_view(),
+        name='start-session'
     ),
 ]

@@ -1,7 +1,8 @@
-from datetime import datetime, timedelta, timezone
-import time
-import string
-
+from datetime import date, datetime, timedelta, timezone
+import pytz
+tzinfo=pytz.UTC
+a = datetime.utcnow()
+print(a)
 """
 print(string)
 now = datetime.now()
@@ -20,6 +21,3 @@ print("Then ",then)
 
 print(now>then)
 """
-
-
-print(datetime.now() + timedelta(seconds=1615152699 - datetime.now().timestamp()))

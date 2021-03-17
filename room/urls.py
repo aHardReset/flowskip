@@ -3,34 +3,44 @@ from django.urls import path
 from room import views
 
 urlpatterns = [
+    # Room Manager
     path(
         'create-personal',
-        view=views.CreatePersonal.as_view(),
+        view=views.RoomManager.as_view(),
         name='create-personal'
     ),
     path(
         'create-commerce',
-        view=views.CreateCommerce.as_view(),
+        view=views.RoomManager.as_view(),
         name='create-commerce'
     ),
     path(
         'details',
-        view=views.Details.as_view(),
+        view=views.RoomManager.as_view(),
         name='details'
     ),
+
+    # Participants manager
     path(
-        'join',
-        view=views.Join.as_view(),
+        'participant/join',
+        view=views.ParticipantManager.as_view(),
         name='join'
     ),
     path(
-        'participants',
-        view=views.Participants.as_view(),
-        name='participants'
+        'participants/leave',
+        view=views.ParticipantManager.as_view(),
+        name='leave'
+    ),
+
+    # Room State
+    path(
+        'state/current-playback',
+        view=views.StateManager.as_view(),
+        name='current-playback'
     ),
     path(
-        'leave',
-        view=views.Leave.as_view(),
-        name='leave'
+        'state/participants',
+        view=views.StateManager.as_view(),
+        name='participants'
     ),
 ]
