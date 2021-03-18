@@ -43,6 +43,10 @@ class UserManager(APIView):
         except ObjectDoesNotExist as e:
             response['msg'] = response['msg'] = str(e).replace("query", session_key)
             return Response(response, status=status.HTTP_404_NOT_FOUND)
+
+        if Users.objects.filter(pk=session).exists():
+            response['msg'] = 'this user already exists'
+            return Response(response, status=status.HTTP_208_ALREADY_REPORTED)
         
         user = Users(pk=session)
         user.save()
