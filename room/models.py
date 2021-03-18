@@ -44,3 +44,15 @@ class Rooms(models.Model):
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
+
+class CurrentPlayback(models.Model):
+    song_id = models.CharField(
+        max_length=64,
+        null=False
+    )
+    current_playback = models.TextField(
+        blank=False,
+        default=r"{}"
+    )
+
+    modified_at = models.DateTimeField(auto_now=True)

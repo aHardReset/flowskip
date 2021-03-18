@@ -1,4 +1,5 @@
 # Django
+from typing import Tuple
 from django.contrib.sessions.models import Session
 from django.urls import resolve
 from django.core.exceptions import ObjectDoesNotExist
@@ -215,6 +216,34 @@ class ParticipantManager(APIView):
         print("The user is commerce, so check its geolocalization")
 
 class StateManager(APIView):
+    def post(self, request, format=None):
+        response = {}
+        try:
+            session_key = request.data['session_key']
+            code = request.data['code']
+            song_id = request.data.get('song_id')
+            session = Session.objects.get(pk=session_key)
+            user = Users.objects.get(pk=session)
+            room = Rooms.objects.get(code=code)
+        except KeyError as key:
+            response['msg'] = response_msgs.key_error(key)
+            return Response(response, status=status.HTTP_400_BAD_REQUEST)
+        except ObjectDoesNotExist as e:
+            response['msg'] = str(e).replace("query", session_key)
+            return Response(response, status=status.HTTP_200_OK)
+        if not user.room.code == code:
+            response['msg'] = f'code {code} incorrect, maybe the room has changed'
+            return Response(response, status=status.HTTP_426_UPGRADE_REQUIRED)
+        
+        new_tokens = False
+        switch = resolve(request.path).url_name
+        if switch == 'vote_to_skip':
+            data, new_tokens = self.vote_to_skip(user, room, song_id)
+    
+    @staticmethod
+    def vote_to_skip(user, song_id):
+        pass
+
     def get(self, request, format=None):
         response = {}
 
@@ -241,16 +270,34 @@ class StateManager(APIView):
         new_tokens = False
         switch = resolve(request.path).url_name
         if switch == 'current-playback':
-            data, new_tokens = get_current_playback(tokens)
+            data, new_tokens = self.get_room_current_playback(tokens)
         elif switch == 'participants':
-            data = self.get_participants(room)
+            data = self.get_room_participants(room)
         
         response = {} if not data else data
         if new_tokens:
             update_db_tokens(spotify_basic_data, new_tokens)
         return Response(response, status=status.HTTP_200_OK)
 
-    def get_participants(self, room: object)-> dict:
+    @staticmethod
+    def get_room_current_playback(tokens: dict) -> Tuple[dict,dict]:
+        data, new_tokens = get_current_playback(tokens) # ! this need to be current playing track
+        if data != {}:
+            # ! Si esta en shuffle desactivar
+            # ! del data['shuffle']
+            del data['device']
+            del data['context']
+            del data['actions']
+            del data['timestamp']
+        # ! Store the data, song_id in the CurrentPlayback
+        # ? If current_song_id != song_id delete all in the rows
+        # ! This function only will query the database not spotify
+        # ! We will make a request in spotify on the create room
+        # ! And schedule a function every one second.
+        return (data, new_tokens)
+
+    @staticmethod
+    def get_room_participants(room: object)-> dict:
         response = {}
 
         response['users'] = []

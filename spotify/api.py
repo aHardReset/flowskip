@@ -68,12 +68,8 @@ def get_current_playback(tokens: dict) -> tuple:
     new_tokens = get_tokens(tokens)
     sp = spotipy.Spotify(auth=new_tokens['access_token'])
     data = sp.current_playback()
-    try:
-        del data['device']
-        del data['context']
-        del data['actions']
-        del data['timestamp']
-    finally:
-        if new_tokens == tokens:
-            new_tokens = None
-        return (data, new_tokens)
+    if not data:
+        data = {}
+    if new_tokens == tokens:
+        new_tokens = None
+    return (data, new_tokens)
