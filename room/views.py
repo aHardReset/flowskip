@@ -1,6 +1,8 @@
 # Django
+from typing import Tuple
 from django.contrib.sessions.models import Session
 from django.urls import resolve
+from django.utils import timezone
 from django.core.exceptions import ObjectDoesNotExist
 
 # Rest Framework
@@ -9,13 +11,15 @@ from rest_framework import response
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
+import json
+
 # Models
 from room.serializers import CreateRoomSerializer, RoomSerializer
 from room.models import Rooms
 from user.models import Users, PaidUsers, Commerces
 
 # Utilities
-from spotify.api import get_current_playback
+from spotify import api as spotify_api
 from spotify.snippets import get_db_tokens, update_db_tokens
 from flowskip import response_msgs
 
@@ -215,6 +219,36 @@ class ParticipantManager(APIView):
         print("The user is commerce, so check its geolocalization")
 
 class StateManager(APIView):
+    def post(self, request, format=None):
+        response = {}
+        try:
+            session_key = request.data['session_key']
+            code = request.data['code']
+            song_id = request.data.get('song_id')
+            session = Session.objects.get(pk=session_key)
+            user = Users.objects.get(pk=session)
+            room = Rooms.objects.get(code=code)
+        except KeyError as key:
+            response['msg'] = response_msgs.key_error(key)
+            return Response(response, status=status.HTTP_400_BAD_REQUEST)
+        except ObjectDoesNotExist as e:
+            response['msg'] = str(e).replace("query", session_key)
+            return Response(response, status=status.HTTP_200_OK)
+        if not user.room.code == code:
+            response['msg'] = f'code {code} incorrect, maybe the room has changed'
+            return Response(response, status=status.HTTP_426_UPGRADE_REQUIRED)
+        
+        switch = resolve(request.path).url_name.lower()
+        if switch == 'vote_to_skip':
+            pass
+        return Response(response, status=status.HTTP_201_CREATED)
+    
+    @staticmethod
+    def vote_to_skip(user, song_id):
+        pass
+        
+        return Response(response, status=status.HTTP_200_OK)
+
     def get(self, request, format=None):
         response = {}
 
@@ -235,25 +269,60 @@ class StateManager(APIView):
             response['msg'] = f'code {code} incorrect, maybe the room has changed'
             return Response(response, status=status.HTTP_426_UPGRADE_REQUIRED)
         
-        spotify_basic_data = room.host.spotify_basic_data
-        tokens = get_db_tokens(spotify_basic_data)
+        sp = spotify_api.api_manager(room.host.spotify_basic_data)
         
-        new_tokens = False
-        switch = resolve(request.path).url_name
-        if switch == 'current-playback':
-            data, new_tokens = get_current_playback(tokens)
+        switch = resolve(request.path).url_name.lower()
+        if switch == 'current-playing-track':
+            response = self.frontend_current_playing_track(room)
+        elif switch == 'current-playback':
+            response = self.frontend_current_playback(sp.current_playback())
         elif switch == 'participants':
-            data = self.get_participants(room)
+            response = self.get_room_participants(room)
         
-        response = {} if not data else data
-        if new_tokens:
-            update_db_tokens(spotify_basic_data, new_tokens)
         return Response(response, status=status.HTTP_200_OK)
+    
+    @staticmethod
+    def frontend_current_playing_track(room: object):
+        if (timezone.now() - room.modified_at).total_seconds() > 2:
+            sp = spotify_api.api_manager(room.host.spotify_basic_data)
+            data = sp.current_user_playing_track()
+            if data:
+                del data['timestamp']
+                del data['context']
+                room.song_id = data['item']['id']
+            else:
+                data = {}
+                room.song_id = ""
+            
+            room.current_playback = json.dumps(data)
+            room.modified_at = timezone.now()
+            room.save(update_fields=[
+                'song_id',
+                'current_playback',
+                'modified_at',
+            ])
+        return json.loads(room.current_playback)
+    
+    @staticmethod
+    def frontend_current_playback(data: dict) -> dict:
+        if data:
+            # ! Si esta en shuffle desactivar
+            # ! del data['shuffle']
+            del data['device']
+            del data['context']
+            del data['actions']
+            del data['timestamp']
+        # ! Store the data, song_id in the CurrentPlayback
+        # ? If current_song_id != song_id delete all in the rows
+        # ! This function only will query the database not spotify
+        # ! We will make a request in spotify on the create room
+        # ! And schedule a function every one second.
+        return data if data else {}
 
-    def get_participants(self, room: object)-> dict:
-        response = {}
+    @staticmethod
+    def get_room_participants(room: object)-> dict:
+        participants = []
 
-        response['users'] = []
         users = Users.objects.filter(room=room)
         for user in users:
             spotify_basic_data = user.spotify_basic_data
@@ -272,6 +341,6 @@ class StateManager(APIView):
                     'external-url' : spotify_basic_data.external_url,
                     'product': spotify_basic_data.product
                 }
-            
-            response['users'].append(participant)
-        return response
+            participants.append(participant)
+        
+        return participants
