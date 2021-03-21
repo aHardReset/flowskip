@@ -34,6 +34,11 @@ urlpatterns = [
 
     # Room State
     path(
+        'state/current-playing-track',
+        view=views.StateManager.as_view(),
+        name='current-playing-track'
+    ),
+    path(
         'state/current-playback',
         view=views.StateManager.as_view(),
         name='current-playback'

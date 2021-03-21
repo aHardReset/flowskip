@@ -40,19 +40,17 @@ class Rooms(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(999)],
         help_text="total of votes for the current song"
     )
-
-    # Metadata
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-
-class CurrentPlayback(models.Model):
     song_id = models.CharField(
         max_length=64,
-        null=False
+        null=False,
+        blank=True,
+        default=""
     )
     current_playback = models.TextField(
         blank=False,
         default=r"{}"
     )
 
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)

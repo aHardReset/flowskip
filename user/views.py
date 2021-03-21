@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 from user.models import Users, PaidUsers, Commerces
 
 # Utilities
-from spotify.api import get_current_user
+from spotify import api as spotify_api
 from spotify.snippets import update_data_changed, get_db_tokens, update_db_tokens
 from flowskip import response_msgs
 
@@ -113,13 +113,10 @@ class UserManager(APIView):
         Returns:
             data (dict): The data retrieved from spotify api for the current user
         """
-
-        spotify_basic_data = user.spotify_basic_data
-        tokens = get_db_tokens(spotify_basic_data)
-        data, new_tokens = get_current_user(tokens)
-        if new_tokens:
-            spotify_basic_data =  update_db_tokens(spotify_basic_data, new_tokens)
         
+        spotify_basic_data = user.spotify_basic_data
+        sp = spotify_api.api_manager(spotify_basic_data)
+        data = sp.current_user()
         update_data_changed(spotify_basic_data, data)
         return data
 

@@ -45,8 +45,8 @@ def get_db_tokens(spotify_basic_data: object) -> dict:
     return tokens
 
 def update_db_tokens(spotify_basic_data: object, new_tokens: dict) -> object:
-    spotify_basic_data.access_token = new_tokens['access_token'],
-    spotify_basic_data.refresh_token=new_tokens['refresh_token'],
+    spotify_basic_data.access_token = new_tokens['access_token']
+    spotify_basic_data.refresh_token=new_tokens['refresh_token']
     spotify_basic_data.access_token_expires_at = new_tokens['expires_at']
     spotify_basic_data.save(update_fields=[
         'access_token',
