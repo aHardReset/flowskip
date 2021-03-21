@@ -1,6 +1,9 @@
 # Text editor environment configurations
 .vscode/**
 
+# Debug files
+.cache**
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

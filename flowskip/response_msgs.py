@@ -39,7 +39,7 @@ def serializer_not_valid() -> str:
     return 'data posted not valid'
 
 def user_not_authenticated(session_key: str) -> str:
-    return " ".join()(
+    return " ".join(
         [f'user with session_key: {session_key}',
         'is not authenticated']
     )

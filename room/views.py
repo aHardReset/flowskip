@@ -1,5 +1,4 @@
 # Django
-from typing import Tuple
 from django.contrib.sessions.models import Session
 from django.urls import resolve
 from django.utils import timezone
@@ -15,7 +14,7 @@ import json
 
 # Models
 from room.serializers import CreateRoomSerializer, RoomSerializer
-from room.models import Rooms
+from room.models import Rooms, VotesToSkip
 from user.models import Users, PaidUsers, Commerces
 
 # Utilities
@@ -80,11 +79,11 @@ class RoomManager(APIView):
             return Response(response, status=status.HTTP_400_BAD_REQUEST)
         
         if resolve(request.path).url_name == 'create-personal':
-            response, status = self.create_personal(serializer, user, spotify_basic_data)
-            return Response(response, status=status)
+            response, response_status = self.create_personal(serializer, user, spotify_basic_data)
         if resolve(request.path).url_name == 'create-commerce':
-            response, status = self.create_commerce(serializer, user, spotify_basic_data)
-            return Response(response, status=status)
+            response, response_status = self.create_commerce(serializer, user, spotify_basic_data)
+        
+        return Response(response, status=response_status)
 
     def create_personal(self, serializer, user, spotify_basic_data, format=None):
         response = {}
@@ -219,92 +218,150 @@ class ParticipantManager(APIView):
         print("The user is commerce, so check its geolocalization")
 
 class StateManager(APIView):
+    def __init__(self) -> None:
+        self.request = None
+        self.room = None
+        self.code = None
+        self.session_key = None
+        self.user = None
+        self.session = None
+        self.track_id = None
+        self.sp_api_tunel = None
+        self.response = {}
+        self.response_code = 200
+        self.is_host = False
+    
     def post(self, request, format=None):
         response = {}
         try:
-            session_key = request.data['session_key']
-            code = request.data['code']
-            song_id = request.data.get('song_id')
-            session = Session.objects.get(pk=session_key)
-            user = Users.objects.get(pk=session)
-            room = Rooms.objects.get(code=code)
+            self.request = request
+            self.session_key = request.data['session_key']
+            self.code = request.data['code']
+            self.track_id = request.data.get('track_id')
+            self.session = Session.objects.get(pk=self.session_key)
+            self.user = Users.objects.get(pk=self.session)
+            self.room = Rooms.objects.get(code=self.code)
+            self.sp_api_tunel = spotify_api.api_manager(self.room.host.spotify_basic_data)
+            self.is_host = self.room.host.session.session_key == self.session_key
         except KeyError as key:
             response['msg'] = response_msgs.key_error(key)
             return Response(response, status=status.HTTP_400_BAD_REQUEST)
         except ObjectDoesNotExist as e:
-            response['msg'] = str(e).replace("query", session_key)
+            response['msg'] = str(e).replace("query", self.session_key)
             return Response(response, status=status.HTTP_200_OK)
-        if not user.room.code == code:
-            response['msg'] = f'code {code} incorrect, maybe the room has changed'
+        if not self.user.room.code == self.code:
+            response['msg'] = f'code {self.code} incorrect, maybe the room has changed'
             return Response(response, status=status.HTTP_426_UPGRADE_REQUIRED)
         
         switch = resolve(request.path).url_name.lower()
-        if switch == 'vote_to_skip':
-            pass
-        return Response(response, status=status.HTTP_201_CREATED)
+        print(switch)
+        if switch == 'vote-to-skip':
+            self.vote_to_skip()
+        return Response(self.response, status=self.response_code)
     
-    @staticmethod
-    def vote_to_skip(user, song_id):
-        pass
+    def vote_to_skip(self):
+        def register_vote():
+            vote = VotesToSkip(
+                room= self.room,
+                user = self.user,
+                track_id = self.track_id
+            )
+            vote.save()
+            self.response['msg'] = f'New vote for {self.track_id}'
+            self.response_code = status.HTTP_201_CREATED
         
-        return Response(response, status=status.HTTP_200_OK)
+        if not self.track_id:
+            self.response['msg'] = f"track_id {self.track_id} not found in request"
+            self.response_code = status.HTTP_400_BAD_REQUEST
+            return None
+        
+        last_know_track_id = self.room.track_id
+        if last_know_track_id == "":
+            self.response['msg'] = f"there's no track played ever in this room"
+            self.response_code = status.HTTP_304_NOT_MODIFIED
+            return None
+        
+        VotesToSkip.objects.exclude(track_id=self.room.track_id).delete()
+        if last_know_track_id == self.track_id:
+            track_votes = VotesToSkip.objects.filter(track_id=self.track_id)
+            votes = track_votes.count()
+            for user in track_votes.values('user'):
+                if self.user.session.session_key == user['user']:
+                    self.response['msg'] = 'This user has vote already'
+                    self.response_code = status.HTTP_208_ALREADY_REPORTED
+                    return None
+            register_vote()
+            votes += 1
+        
+            self.response['msg'] = "new vote registered"
+            self.response_code = status.HTTP_200_OK
+            if votes >= self.room.votes_to_skip:
+                self.response['msg'] = "skipping song"
+                # El verdugo -> has hecho el voto de gracia
+                self.sp_api_tunel.next_track()
+        else:
+            self.response['msg'] = 'maybe you have voted to old track_id'
+            self.response_code = status.HTTP_422_UNPROCESSABLE_ENTITY         
 
     def get(self, request, format=None):
         response = {}
 
         try:
-            session_key = request.GET['session_key']
-            code = request.GET['code']
-            session = Session.objects.get(pk=session_key)
-            user = Users.objects.get(pk=session)
-            room = Rooms.objects.get(code=code)
+            self.request = request
+            self.session_key = request.GET['session_key']
+            self.code = request.GET['code']
+            self.session = Session.objects.get(pk=self.session_key)
+            self.user = Users.objects.get(pk=self.session)
+            self.room = Rooms.objects.get(code=self.code)
+            self.sp_api_tunel = spotify_api.api_manager(self.room.host.spotify_basic_data)
+            self.is_host = self.room.host.session.session_key == self.session_key
         except KeyError as key:
             response['msg'] = response_msgs.key_error(key)
             return Response(response, status=status.HTTP_400_BAD_REQUEST)
         except ObjectDoesNotExist as e:
-            response['msg'] = str(e).replace("query", session_key)
+            response['msg'] = str(e).replace("query", self.session_key)
             return Response(response, status=status.HTTP_200_OK)
         
-        if not user.room.code == code:
-            response['msg'] = f'code {code} incorrect, maybe the room has changed'
+        if not self.user.room.code == self.code:
+            response['msg'] = f'code {self.code} incorrect, maybe the room has changed'
             return Response(response, status=status.HTTP_426_UPGRADE_REQUIRED)
-        
-        sp = spotify_api.api_manager(room.host.spotify_basic_data)
+        del response
         
         switch = resolve(request.path).url_name.lower()
+        response_status = status.HTTP_200_OK
+        if switch == 'full':
+            self.room_participants_delta()
         if switch == 'current-playing-track':
-            response = self.frontend_current_playing_track(room)
+            self.frontend_current_playing_track()
         elif switch == 'current-playback':
-            response = self.frontend_current_playback(sp.current_playback())
+            self.frontend_current_playback()
         elif switch == 'participants':
-            response = self.get_room_participants(room)
+            self.room_participants()
         
-        return Response(response, status=status.HTTP_200_OK)
+        return Response(self.response, status=response_status)
     
-    @staticmethod
-    def frontend_current_playing_track(room: object):
-        if (timezone.now() - room.modified_at).total_seconds() > 2:
-            sp = spotify_api.api_manager(room.host.spotify_basic_data)
-            data = sp.current_user_playing_track()
+    def frontend_current_playing_track(self)->None:
+        if (timezone.now() - self.room.modified_at).total_seconds() > 2:
+            data = self.sp_api_tunel.current_user_playing_track()
             if data:
                 del data['timestamp']
                 del data['context']
-                room.song_id = data['item']['id']
+                del data['actions']
+                self.room.track_id = data['item']['id']
             else:
                 data = {}
-                room.song_id = ""
             
-            room.current_playback = json.dumps(data)
-            room.modified_at = timezone.now()
-            room.save(update_fields=[
-                'song_id',
+            self.room.current_playback = json.dumps(data)
+            self.room.modified_at = timezone.now()
+            self.room.save(update_fields=[
+                'track_id',
                 'current_playback',
                 'modified_at',
             ])
-        return json.loads(room.current_playback)
+        self.response = json.loads(self.room.current_playback)
     
-    @staticmethod
-    def frontend_current_playback(data: dict) -> dict:
+    def frontend_current_playback(self) ->  None:
+        data = self.sp_api_tunel.current_playback()
         if data:
             # ! Si esta en shuffle desactivar
             # ! del data['shuffle']
@@ -312,18 +369,12 @@ class StateManager(APIView):
             del data['context']
             del data['actions']
             del data['timestamp']
-        # ! Store the data, song_id in the CurrentPlayback
-        # ? If current_song_id != song_id delete all in the rows
-        # ! This function only will query the database not spotify
-        # ! We will make a request in spotify on the create room
-        # ! And schedule a function every one second.
-        return data if data else {}
+            self.response = data
 
-    @staticmethod
-    def get_room_participants(room: object)-> dict:
+    def room_participants(self)-> None:
         participants = []
 
-        users = Users.objects.filter(room=room)
+        users = Users.objects.filter(room=self.room)
         for user in users:
             spotify_basic_data = user.spotify_basic_data
             # Llamar a spotify
@@ -343,4 +394,22 @@ class StateManager(APIView):
                 }
             participants.append(participant)
         
-        return participants
+        self.response = participants
+
+    def room_participants_delta(self):
+        req_participants = self.request.data.get('participants', [])
+            
+        self.room_participants()
+        current_participants = self.response
+
+        pass
+
+
+    def full(self):
+        response = {}
+
+        self.frontend_current_playing_track()
+        response['current-playing-track'] = self.response
+        self.room_participants()
+        response['participants'] = self.response
+        return Response({}, status=status.HTTP_501_NOT_IMPLEMENTED)

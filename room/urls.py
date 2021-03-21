@@ -48,4 +48,14 @@ urlpatterns = [
         view=views.StateManager.as_view(),
         name='participants'
     ),
+    path(
+        'state/vote-to-skip',
+        view=views.StateManager.as_view(),
+        name='vote-to-skip'
+    ),
+    path(
+        'state/full',
+        view=views.StateManager.as_view(),
+        name='participants'
+    ),
 ]
