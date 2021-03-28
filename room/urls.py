@@ -34,19 +34,9 @@ urlpatterns = [
 
     # Room State
     path(
-        'state/current-playing-track',
+        'state/',
         view=views.StateManager.as_view(),
-        name='current-playing-track'
-    ),
-    path(
-        'state/current-playback',
-        view=views.StateManager.as_view(),
-        name='current-playback'
-    ),
-    path(
-        'state/participants',
-        view=views.StateManager.as_view(),
-        name='participants'
+        name='state'
     ),
     path(
         'state/vote-to-skip',
@@ -54,8 +44,8 @@ urlpatterns = [
         name='vote-to-skip'
     ),
     path(
-        'state/full',
+        'state/tracks',
         view=views.StateManager.as_view(),
-        name='participants'
+        name='tracks'
     ),
 ]

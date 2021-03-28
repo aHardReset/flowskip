@@ -6,20 +6,21 @@ from django.core.exceptions import ObjectDoesNotExist
 
 # Rest Framework
 from rest_framework import status
-from rest_framework import response
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
 import json
 
 # Models
+from room import serializers as room_serializers
 from room.serializers import CreateRoomSerializer, RoomSerializer
-from room.models import Rooms, VotesToSkip
+from room.models import Rooms, VotesToSkip, SkippedTracks, SuccessTracks, RecommendedTracks
 from user.models import Users, PaidUsers, Commerces
+from flowskip.auths import SessionAuthentication
 
 # Utilities
+from room import snippets as room_snippets
 from spotify import api as spotify_api
-from spotify.snippets import get_db_tokens, update_db_tokens
 from flowskip import response_msgs
 
 
@@ -218,18 +219,7 @@ class ParticipantManager(APIView):
         print("The user is commerce, so check its geolocalization")
 
 class StateManager(APIView):
-    def __init__(self) -> None:
-        self.request = None
-        self.room = None
-        self.code = None
-        self.session_key = None
-        self.user = None
-        self.session = None
-        self.track_id = None
-        self.sp_api_tunel = None
-        self.response = {}
-        self.response_code = 200
-        self.is_host = False
+    authentication_classes = [SessionAuthentication]
     
     def post(self, request, format=None):
         response = {}
@@ -254,54 +244,60 @@ class StateManager(APIView):
             return Response(response, status=status.HTTP_426_UPGRADE_REQUIRED)
         
         switch = resolve(request.path).url_name.lower()
-        print(switch)
         if switch == 'vote-to-skip':
-            self.vote_to_skip()
-        return Response(self.response, status=self.response_code)
+            response = self.vote_to_skip()
+        return Response(response, status=self.response_code)
     
     def vote_to_skip(self):
-        def register_vote():
-            vote = VotesToSkip(
-                room= self.room,
-                user = self.user,
-                track_id = self.track_id
-            )
-            vote.save()
-            self.response['msg'] = f'New vote for {self.track_id}'
-            self.response_code = status.HTTP_201_CREATED
-        
+        response = {}
         if not self.track_id:
-            self.response['msg'] = f"track_id {self.track_id} not found in request"
+            response['msg'] = f"track_id {self.track_id} not found in request"
             self.response_code = status.HTTP_400_BAD_REQUEST
             return None
         
-        last_know_track_id = self.room.track_id
-        if last_know_track_id == "":
-            self.response['msg'] = f"there's no track played ever in this room"
+        if self.room.track_id == "":
+            response['msg'] = f"there's no track played ever in this room"
             self.response_code = status.HTTP_304_NOT_MODIFIED
             return None
         
-        VotesToSkip.objects.exclude(track_id=self.room.track_id).delete()
-        if last_know_track_id == self.track_id:
-            track_votes = VotesToSkip.objects.filter(track_id=self.track_id)
-            votes = track_votes.count()
-            for user in track_votes.values('user'):
-                if self.user.session.session_key == user['user']:
-                    self.response['msg'] = 'This user has vote already'
-                    self.response_code = status.HTTP_208_ALREADY_REPORTED
-                    return None
-            register_vote()
-            votes += 1
+        current_playing_track = json.loads(self.room.current_playing_track)
+        progress_ms = current_playing_track['progress_ms']
+        duration_ms = current_playing_track['item']['duration_ms']
+        if (progress_ms/duration_ms)*100 > 96:
+            response['msg'] = f"too late to vote"
+            self.response_code = status.HTTP_410_GONE
+            return None
         
-            self.response['msg'] = "new vote registered"
-            self.response_code = status.HTTP_200_OK
-            if votes >= self.room.votes_to_skip:
-                self.response['msg'] = "skipping song"
-                # El verdugo -> has hecho el voto de gracia
-                self.sp_api_tunel.next_track()
-        else:
-            self.response['msg'] = 'maybe you have voted to old track_id'
-            self.response_code = status.HTTP_422_UNPROCESSABLE_ENTITY         
+        room_votes = VotesToSkip.objects.filter(room=self.room)
+        room_votes.exclude(track_id=self.room.track_id).delete()
+        if self.room.track_id != self.track_id:
+            response['msg'] = 'maybe you have voted to old track_id'
+            self.response_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+            return None
+        
+        track_votes = VotesToSkip.objects.filter(track_id=self.track_id)
+        votes = track_votes.count()
+        for user in track_votes.values('user'):
+            if self.user.session.session_key == user['user']:
+                response['msg'] = 'This user has vote already'
+                self.response_code = status.HTTP_208_ALREADY_REPORTED
+                return None
+        vote = VotesToSkip(
+            room= self.room,
+            user = self.user,
+            track_id = self.room.track_id
+        )
+        vote.save()
+        votes += 1
+    
+        response['msg'] = "new vote registered"
+        self.response_code = status.HTTP_200_OK
+        if votes >= self.room.votes_to_skip:
+            response['msg'] = "skipping song"
+            # El verdugo -> has hecho el voto de gracia
+            self.sp_api_tunel.next_track()
+            room_snippets.register_track(SkippedTracks, self.room, current_playing_track)
+        return response
 
     def get(self, request, format=None):
         response = {}
@@ -325,91 +321,67 @@ class StateManager(APIView):
         if not self.user.room.code == self.code:
             response['msg'] = f'code {self.code} incorrect, maybe the room has changed'
             return Response(response, status=status.HTTP_426_UPGRADE_REQUIRED)
-        del response
         
-        switch = resolve(request.path).url_name.lower()
         response_status = status.HTTP_200_OK
-        if switch == 'full':
-            self.room_participants_delta()
-        if switch == 'current-playing-track':
-            self.frontend_current_playing_track()
-        elif switch == 'current-playback':
-            self.frontend_current_playback()
-        elif switch == 'participants':
-            self.room_participants()
-        
-        return Response(self.response, status=response_status)
-    
-    def frontend_current_playing_track(self)->None:
-        if (timezone.now() - self.room.modified_at).total_seconds() > 2:
-            data = self.sp_api_tunel.current_user_playing_track()
-            if data:
-                del data['timestamp']
-                del data['context']
-                del data['actions']
-                self.room.track_id = data['item']['id']
-            else:
-                data = {}
-            
-            self.room.current_playback = json.dumps(data)
-            self.room.modified_at = timezone.now()
-            self.room.save(update_fields=[
-                'track_id',
-                'current_playback',
-                'modified_at',
-            ])
-        self.response = json.loads(self.room.current_playback)
-    
-    def frontend_current_playback(self) ->  None:
-        data = self.sp_api_tunel.current_playback()
-        if data:
-            # ! Si esta en shuffle desactivar
-            # ! del data['shuffle']
-            del data['device']
-            del data['context']
-            del data['actions']
-            del data['timestamp']
-            self.response = data
+        switch = resolve(request.path).url_name.lower()
+        if switch == 'tracks':
+            print(switch)
+            response = self.tracks()
+        return Response(response, status=response_status)
 
-    def room_participants(self)-> None:
-        participants = []
-
-        users = Users.objects.filter(room=self.room)
-        for user in users:
-            spotify_basic_data = user.spotify_basic_data
-            # Llamar a spotify
-            if spotify_basic_data is None:
-                participant = {
-                    'is_authenticated': False,
-                    'id': user.session.session_key[-6:]
-                }
-            else:
-                participant = {
-                    'is_authenticated': True,
-                    'id': user.session.session_key[-6:],
-                    'display_name': spotify_basic_data.display_name,
-                    'image_url': spotify_basic_data.image_url,
-                    'external-url' : spotify_basic_data.external_url,
-                    'product': spotify_basic_data.product
-                }
-            participants.append(participant)
-        
-        self.response = participants
-
-    def room_participants_delta(self):
-        req_participants = self.request.data.get('participants', [])
-            
-        self.room_participants()
-        current_participants = self.response
-
-        pass
-
-
-    def full(self):
+    def tracks(self) -> dict:
         response = {}
+        query = SuccessTracks.objects.filter(room=self.room)
+        response['success_tracks'] = room_snippets.query_to_list_dict(query, room_serializers.SuccessTracksSerializer)
+        query = SkippedTracks.objects.filter(room=self.room)
+        response['skipped_tracks'] = room_snippets.query_to_list_dict(query, room_serializers.SkippedTracksSerializer)
+        query = RecommendedTracks.objects.filter(room=self.room)
+        response['recommended_tracks'] = room_snippets.query_to_list_dict(query, room_serializers.RecommendedTracksSerializer)
+        return response
 
-        self.frontend_current_playing_track()
-        response['current-playing-track'] = self.response
-        self.room_participants()
-        response['participants'] = self.response
-        return Response({}, status=status.HTTP_501_NOT_IMPLEMENTED)
+    
+    def patch(self, request, format=None):
+        response = {}
+        try:
+            track_id = self.request.data['track_id']
+            room = Rooms.objects.get(code=self.request.data['code'])
+        except KeyError as key:
+            response['msg'] = response_msgs.key_error(key)
+            return Response(response, status=status.HTTP_400_BAD_REQUEST)
+        except ObjectDoesNotExist as e:
+            response['msg'] = str(e)
+            return Response(response, status=status.HTTP_404_NOT_FOUND)
+        
+        sp_api_tunel = spotify_api.api_manager(room.host.spotify_basic_data)
+        is_host = room.host.session.session_key == request.user.session.session_key
+        
+        if (timezone.now() - room.modified_at).total_seconds() > 2:
+            data = sp_api_tunel.current_user_playing_track()
+            room = room_snippets.clean_playing_track(room, data)
+        current_playing_track = json.loads(room.current_playing_track)
+        response['current-playing-track'] = current_playing_track
+        
+        if current_playing_track != {}:
+            progress_ms = current_playing_track['progress_ms']
+            durarion_ms = current_playing_track['item']['duration_ms']
+            same_track = current_playing_track['item']['id'] == track_id
+            if (progress_ms/durarion_ms) *100 > 96 and same_track:
+                room_snippets.register_track(SuccessTracks, room, current_playing_track)
+
+        participants_in_req = request.data.get('participants', [])
+        if type(participants_in_req) is list:
+            participants_in_db = Users.objects.filter(room=room)
+            participants_in_db = room_snippets.construct_participants(participants_in_db)
+            response['participants'] = room_snippets.calculate_user_deltas(participants_in_db, participants_in_req)
+        
+        votes_in_req = request.data.get('votes', [])
+        if type(votes_in_req) is list:
+            votes_in_db = VotesToSkip.objects.filter(
+                room=room
+            ).filter(track_id=room.track_id)
+
+            votes_in_db = [vote.user for vote in votes_in_db]
+            votes_in_db = room_snippets.construct_participants(votes_in_db)
+            response['votes_to_skip'] = room_snippets.calculate_user_deltas(votes_in_db, votes_in_req)
+        response_code = status.HTTP_200_OK
+        return Response(response, status=response_code)

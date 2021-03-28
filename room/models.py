@@ -46,13 +46,13 @@ class Rooms(models.Model):
     )
     track_id = models.CharField(
         max_length=64,
-        null=False,
-        blank=True,
-        default="",
+        null=True,
+        blank=False,
+        default=None,
         help_text="spotify song_id",
     )
 
-    current_playback = models.TextField(
+    current_playing_track = models.TextField(
         blank=False,
         default=r"{}",
         null=False,
@@ -63,7 +63,7 @@ class Rooms(models.Model):
     created_at = created_at
     modified_at = modified_at
 
-class Track(models.Model):
+class Tracks(models.Model):
     class Meta:
         abstract = True
     
@@ -76,24 +76,62 @@ class Track(models.Model):
     track_id = models.CharField(
         max_length=64,
         null=False,
-        blank=True,
+        blank=False,
         default="",
-        help_text="spotify song_id",
+        help_text="spotify track_id",
     )
+    uri = models.CharField(
+        max_length=64,
+        blank=False,
+        null=False,
+        help_text="track's uri in Spotify. can be construct with id"
+    )
+
+    # Quick access data
+    name = models.CharField(
+        max_length=128,
+        blank=False,
+        null=True,
+        help_text="track's display name in spotify"
+    )
+    external_url = models.TextField(
+        max_length=1024,
+        blank=False,
+        null=True,
+        help_text="track's first external url in spotify api"
+    )
+    album_name = models.CharField(
+        max_length=128,
+        blank=False,
+        null=True,
+        help_text="track's display name in spotify"
+    )
+    album_image_url = models.TextField(
+        max_length=1024,
+        blank=False,
+        null=True,
+        help_text="album's image url in spotify, intended to be a mid-size image but not ensured"
+    )
+    artists_str = models.TextField(
+        max_length=1024,
+        blank=False,
+        null=True,
+        help_text="artist's names, coma separated"
+    ) 
     created_at = created_at
 
-class VotesToSkip(Track):
+class VotesToSkip(Tracks):
     user = models.OneToOneField(
         'user.Users',
         on_delete=models.CASCADE,
         help_text="who voted to skip the track",
     )
 
-class SuccessTracks(Track):
+class SuccessTracks(Tracks):
     pass
 
-class SkipedTracks(Track):
+class SkippedTracks(Tracks):
     pass
 
-class RecommendedTracks(Track):
+class RecommendedTracks(Tracks):
     pass
