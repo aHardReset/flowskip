@@ -3,6 +3,8 @@ import json
 import string
 from django.apps import apps
 from django.utils import timezone
+from django.db.utils import OperationalError
+import codecs
 
 def generate_unique_code(lenght:int = 6) -> str:
     """Generates a random string that pretends to be the
@@ -31,57 +33,69 @@ def generate_unique_code(lenght:int = 6) -> str:
     return code
 
 def save_track_in_db(Table: object, room: object, data: dict) -> None:
-    
-    uri = data['item']['uri']
-    name = data['item']['name']
-    external_url = data['item']['external_urls']
-    
-    album_name = data['item']['album']['name']
-    images = data['item']['album']['images']
+    uri = data['uri']
+    name = data['name']
+    album_name = data['album']['name']
+    images = data['album']['images']
     index = len(images) // 2
     album_image_url = images[index]['url']
-    
     artists_str = ", ".join([
         artist['name'] for artist 
-        in data['item']['artists']
+        in data['artists']
     ])
+    external_url = data['external_urls']['spotify']
+    try:
+        track = Table(
+            room = room,
+            track_id = room.track_id,
+            uri = uri,
+            external_url = external_url if external_url else None,
+            album_name = album_name if album_name else None,
+            album_image_url = album_image_url if album_image_url else None,
+            artists_str = artists_str if artists_str else None,
+            name = name if name else None,
+        )
+        track.save()
+    except OperationalError as msg:
+        import translitcodec # noqa
 
-    track = Table(
-        room = room,
-        track_id = room.track_id,
-        uri = uri,
-        name = name,
-        external_url = external_url,
-        album_name = album_name,
-        album_image_url = album_image_url,
-        artists_str = artists_str,
-    )
-    track.save()
+        name = codecs.encode(name, 'translit/long')
+        album_name = codecs.encode(album_name, 'translit/long')
+        artists_str = codecs.encode(artists_str, 'translit/long')
+
+        track = Table(
+            room = room,
+            track_id = room.track_id,
+            uri = uri,
+            external_url = external_url if external_url else None,
+            album_name = album_name if album_name else None,
+            album_image_url = album_image_url if album_image_url else None,
+            artists_str = artists_str if artists_str else None,
+            name = name if name else None,
+        )
+        track.save()
 
 def register_track(Table: object, room: object, data: dict) -> None:
     last_track = Table.objects.last()
     if last_track:
         if last_track.track_id != data['item']['id']:
-            save_track_in_db(Table, room, data)
+            save_track_in_db(Table, room, data['item'])
     else:
-        save_track_in_db(Table, room, data)
+        save_track_in_db(Table, room, data['item'])
 
-def clean_playing_track(room: object, data: dict) -> object:
+def clean_playback(room: object, data: dict) -> object:
     
     if data:
         del data['timestamp']
         del data['context']
         del data['actions']
         del data['item']['available_markets']
-        del data['item']['href']
-        del data['item']['album']['href']
         del data['item']['album']['available_markets']
         room.track_id = data['item']['id']
     else:
         data = {}
         room.track_id = None
-        
-    room.current_playing_track = json.dumps(data)
+    room.current_playing_track = data
     room.modified_at = timezone.now()
     room.save(update_fields=[
         'track_id',
@@ -91,7 +105,7 @@ def clean_playing_track(room: object, data: dict) -> object:
     
     return room
 
-def construct_participant(spotify_basic_data: object)-> dict:
+def construct_participant(spotify_basic_data: object, user: object)-> dict:
     Parent = apps.get_model("spotify", "SpotifyBasicData")
     if not isinstance(spotify_basic_data, Parent):
         raise ValueError("I need spotify basic data")
@@ -114,7 +128,7 @@ def construct_participants(users: list[object]) -> list[dict]:
 
         spotify_basic_data = user.spotify_basic_data
         participants.append(
-            construct_participant(spotify_basic_data)
+            construct_participant(spotify_basic_data, user)
         )
 
     return participants
@@ -149,7 +163,4 @@ def calculate_user_deltas(
     return response
     
 def query_to_list_dict(query: list, Serializer: object) -> list[dict]:
-    response = []
-    for i in query:
-        response.append(Serializer(i).data)
-    return response
+    return [dict(Serializer(i).data) for i in query]

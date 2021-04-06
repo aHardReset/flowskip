@@ -1,5 +1,5 @@
 from user.models import Users
-from django.contrib.sessions.models import Session
+from django.apps import apps
 from rest_framework import authentication
 from rest_framework import exceptions
 

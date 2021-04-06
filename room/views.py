@@ -23,8 +23,10 @@ from room import snippets as room_snippets
 from spotify import api as spotify_api
 from flowskip import response_msgs
 
+TOO_LATE = 0
 
 class RoomManager(APIView):
+    authentication_classes = [SessionAuthentication]
 
     def get(self, request, format=None):
         response = {}
@@ -32,15 +34,10 @@ class RoomManager(APIView):
         try:
             session_key = request.GET['session_key']
             code = request.GET['code']
-            session = Session.objects.get(pk=session_key)
-            user = Users.objects.get(pk=session)
-            room = user.room
+            room = request.user.room
         except KeyError as key:
             response['msg'] = response_msgs.key_error(key)
             return Response(response, status=status.HTTP_400_BAD_REQUEST)
-        except ObjectDoesNotExist as e:
-            response['msg'] = str(e).replace("query", session_key)
-            return Response(response, status=status.HTTP_200_OK)
 
         if room is None:
             response['msg'] = f'the user with session_key: {session_key} is not associated to any room'
@@ -154,16 +151,15 @@ class RoomManager(APIView):
         return response, status.HTTP_201_CREATED
 
 class ParticipantManager(APIView):
+    authentication_classes = [SessionAuthentication]
     def post(self, request, format=None):
         response={}
 
         try:
             session_key = request.data['session_key']
             code = request.data['code']
-            session = Session.objects.get(pk=session_key)
-            user = Users.objects.get(pk=session)
-            if not user.room is None:
-                response['msg'] = f'user with session_key: {session_key} is already in a room with code: {user.room.code}'
+            if not request.user.room is None:
+                response['msg'] = f'user with session_key: {session_key} is already in a room with code: {request.user.room.code}'
                 return Response(response, status=status.HTTP_208_ALREADY_REPORTED)
             room = Rooms.objects.get(code=code)
         except KeyError as key:
@@ -176,8 +172,8 @@ class ParticipantManager(APIView):
         is_commerce = Commerces.objects.filter(exclusive_code=room.code).exists()
         if is_commerce:
             self.geo_filter(request)
-        user.room = room
-        user.save(update_fields=['room'])
+        request.user.room = room
+        request.user.save(update_fields=['room'])
         response['msg'] = f'user with session_key: {session_key} added to room with code: {code}'
         return Response(response, status=status.HTTP_201_CREATED)
 
@@ -192,26 +188,21 @@ class ParticipantManager(APIView):
 
         try:
             session_key = request.data["session_key"]
-            session = Session.objects.get(pk=session_key)
-            user = Users.objects.get(pk=session)
         except KeyError as key:
             response['msg'] = response_msgs.key_error(key)
             return Response(response, status=status.HTTP_400_BAD_REQUEST)
-        except ObjectDoesNotExist as e:
-            response['msg'] = str(e).replace("query", session_key)
-            return Response(response, status=status.HTTP_404_NOT_FOUND)
 
-        if user.room is None:
+        if request.user.room is None:
             response['msg'] = f"user with session_key: {session_key} does not have a room"
             return Response(response, status=status.HTTP_204_NO_CONTENT)
         
-        if user.room.host.session.session_key == session_key:
-            room = Rooms.objects.filter(host=user).delete()
+        if request.user.room.host.session.session_key == session_key:
+            room = Rooms.objects.filter(host=request.user).delete()
             response['msg'] = f'user with session:key:{session_key} was host of {room[0]} rooms and the room was killed'
             return Response(response, status=status.HTTP_204_NO_CONTENT)
         
-        user.room = None
-        user.save(update_fields=['room'])
+        request.user.room = None
+        request.user.save(update_fields=['room'])
         response['msg'] = f'user with session_key:{session_key} leave the room'
         return Response(response, status=status.HTTP_204_NO_CONTENT)
 
@@ -224,12 +215,10 @@ class StateManager(APIView):
     def post(self, request, format=None):
         response = {}
         try:
-            self.request = request
             self.session_key = request.data['session_key']
             self.code = request.data['code']
             self.track_id = request.data.get('track_id')
-            self.session = Session.objects.get(pk=self.session_key)
-            self.user = Users.objects.get(pk=self.session)
+            self.user = request.user
             self.room = Rooms.objects.get(code=self.code)
             self.sp_api_tunel = spotify_api.api_manager(self.room.host.spotify_basic_data)
             self.is_host = self.room.host.session.session_key == self.session_key
@@ -239,7 +228,7 @@ class StateManager(APIView):
         except ObjectDoesNotExist as e:
             response['msg'] = str(e).replace("query", self.session_key)
             return Response(response, status=status.HTTP_200_OK)
-        if not self.user.room.code == self.code:
+        if not request.user.room.code == self.code:
             response['msg'] = f'code {self.code} incorrect, maybe the room has changed'
             return Response(response, status=status.HTTP_426_UPGRADE_REQUIRED)
         
@@ -263,7 +252,7 @@ class StateManager(APIView):
         current_playing_track = json.loads(self.room.current_playing_track)
         progress_ms = current_playing_track['progress_ms']
         duration_ms = current_playing_track['item']['duration_ms']
-        if (progress_ms/duration_ms)*100 > 96:
+        if (progress_ms/duration_ms)*100 > TOO_LATE:
             response['msg'] = f"too late to vote"
             self.response_code = status.HTTP_410_GONE
             return None
@@ -303,42 +292,30 @@ class StateManager(APIView):
         response = {}
 
         try:
-            self.request = request
-            self.session_key = request.GET['session_key']
-            self.code = request.GET['code']
-            self.session = Session.objects.get(pk=self.session_key)
-            self.user = Users.objects.get(pk=self.session)
-            self.room = Rooms.objects.get(code=self.code)
-            self.sp_api_tunel = spotify_api.api_manager(self.room.host.spotify_basic_data)
-            self.is_host = self.room.host.session.session_key == self.session_key
+            code = request.GET['code']
+            room = Rooms.objects.get(code=code)
+            is_host = room.host.session.session_key == request.user.session.session_key
         except KeyError as key:
             response['msg'] = response_msgs.key_error(key)
             return Response(response, status=status.HTTP_400_BAD_REQUEST)
         except ObjectDoesNotExist as e:
-            response['msg'] = str(e).replace("query", self.session_key)
+            response['msg'] = str(e).replace("query", request.user.session.session_key)
             return Response(response, status=status.HTTP_200_OK)
         
-        if not self.user.room.code == self.code:
-            response['msg'] = f'code {self.code} incorrect, maybe the room has changed'
+        if not request.user.room.code == code:
+            response['msg'] = f'code {code} incorrect, maybe the room has changed'
             return Response(response, status=status.HTTP_426_UPGRADE_REQUIRED)
         
         response_status = status.HTTP_200_OK
         switch = resolve(request.path).url_name.lower()
         if switch == 'tracks':
-            print(switch)
-            response = self.tracks()
+            query = SuccessTracks.objects.filter(room=room)
+            response['success_tracks'] = room_snippets.query_to_list_dict(query, room_serializers.SuccessTracksSerializer)
+            query = SkippedTracks.objects.filter(room=room)
+            response['skipped_tracks'] = room_snippets.query_to_list_dict(query, room_serializers.SkippedTracksSerializer)
+            query = RecommendedTracks.objects.filter(room=room)
+            response['recommended_tracks'] = room_snippets.query_to_list_dict(query, room_serializers.RecommendedTracksSerializer)
         return Response(response, status=response_status)
-
-    def tracks(self) -> dict:
-        response = {}
-        query = SuccessTracks.objects.filter(room=self.room)
-        response['success_tracks'] = room_snippets.query_to_list_dict(query, room_serializers.SuccessTracksSerializer)
-        query = SkippedTracks.objects.filter(room=self.room)
-        response['skipped_tracks'] = room_snippets.query_to_list_dict(query, room_serializers.SkippedTracksSerializer)
-        query = RecommendedTracks.objects.filter(room=self.room)
-        response['recommended_tracks'] = room_snippets.query_to_list_dict(query, room_serializers.RecommendedTracksSerializer)
-        return response
-
     
     def patch(self, request, format=None):
         response = {}
@@ -354,19 +331,18 @@ class StateManager(APIView):
         
         sp_api_tunel = spotify_api.api_manager(room.host.spotify_basic_data)
         is_host = room.host.session.session_key == request.user.session.session_key
-        
+        data = {}
         if (timezone.now() - room.modified_at).total_seconds() > 2:
-            data = sp_api_tunel.current_user_playing_track()
-            room = room_snippets.clean_playing_track(room, data)
-        current_playing_track = json.loads(room.current_playing_track)
-        response['current-playing-track'] = current_playing_track
-        
-        if current_playing_track != {}:
-            progress_ms = current_playing_track['progress_ms']
-            durarion_ms = current_playing_track['item']['duration_ms']
-            same_track = current_playing_track['item']['id'] == track_id
-            if (progress_ms/durarion_ms) *100 > 96 and same_track:
-                room_snippets.register_track(SuccessTracks, room, current_playing_track)
+            data = sp_api_tunel.current_playback()
+            room = room_snippets.clean_playback(room, data)
+        response['current_playback'] = room.current_playing_track
+
+        if data != {}:
+            progress_ms = data['progress_ms']
+            durarion_ms = data['item']['duration_ms']
+            same_track = data['item']['id'] == track_id
+            if (progress_ms/durarion_ms) *100 > TOO_LATE and same_track:
+                room_snippets.register_track(SuccessTracks, room, data)
 
         participants_in_req = request.data.get('participants', [])
         if type(participants_in_req) is list:

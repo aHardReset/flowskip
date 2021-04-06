@@ -52,11 +52,10 @@ class Rooms(models.Model):
         help_text="spotify song_id",
     )
 
-    current_playing_track = models.TextField(
-        blank=False,
-        default=r"{}",
+    current_playing_track = models.JSONField(
+        default=dict,
         null=False,
-        help_text="json dump string for spotify current playback cleaned for frontend"
+        help_text="spotify current playback cleaned for frontend"
     )
 
     # Metadata
@@ -67,11 +66,12 @@ class Tracks(models.Model):
     class Meta:
         abstract = True
     
-    room = models.OneToOneField(
+    room = models.ForeignKey(
         'room.Rooms',
         on_delete=models.CASCADE,
         null=False,
         help_text="Room",
+        unique=False
     )
     track_id = models.CharField(
         max_length=64,
@@ -88,32 +88,27 @@ class Tracks(models.Model):
     )
 
     # Quick access data
-    name = models.CharField(
-        max_length=128,
+    name = models.TextField(
         blank=False,
         null=True,
         help_text="track's display name in spotify"
     )
     external_url = models.TextField(
-        max_length=1024,
         blank=False,
         null=True,
         help_text="track's first external url in spotify api"
     )
-    album_name = models.CharField(
-        max_length=128,
+    album_name = models.TextField(
         blank=False,
         null=True,
         help_text="track's display name in spotify"
     )
     album_image_url = models.TextField(
-        max_length=1024,
         blank=False,
         null=True,
         help_text="album's image url in spotify, intended to be a mid-size image but not ensured"
     )
     artists_str = models.TextField(
-        max_length=1024,
         blank=False,
         null=True,
         help_text="artist's names, coma separated"
