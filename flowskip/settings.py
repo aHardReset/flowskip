@@ -39,8 +39,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
+    # 3rd party modules
     'rest_framework',
 
+    # My apps
     'user',
     'room',
     'spotify',

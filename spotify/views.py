@@ -1,39 +1,27 @@
 from django.http import HttpResponseRedirect
-from django.conf import settings
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from flowskip.auths import UserAuthentication
 from user.models import Users
-from spotify.snippets import construct_state, deconstruct_state, update_data_changed
+from spotify.snippets import construct_state_value, deconstruct_state_value, update_data_changed
 from spotify.api import auth_manager, get_current_user, delete_cached_token
 from spotify.models import SpotifyBasicData
-from flowskip import response_msgs
+from spotify import serializers as spotify_serializers
 
 ALLOWED_REDIRECTS = ('')
 
 class AuthenticateUser(APIView):
-
+    authentication_classes = [UserAuthentication]
+    
     def get(self, request, format=None):
         response = {}
-        try:
-            session_key = request.GET['session_key']
-            redirect_url = request.GET['redirect_url']
-            force_authentication = request.GET.get("force_authentication")
-            user = Users.objects.get(pk=session_key)
-        except KeyError as key:
-            response['msg'] = response_msgs.key_error(key)
-            return Response(response, status=status.HTTP_400_BAD_REQUEST) 
-        except Users.DoesNotExist:
-            response['msg'] = response_msgs.user_does_not_exists(session_key)
-            return Response(response, status=status.HTTP_404_NOT_FOUND)
-        
-        if not user.spotify_basic_data is None and not force_authentication:
-            response['msg'] = response_msgs.user_already_exists(session_key)
+        spotify_serializers.RedirectSerializer(data=request.GET).is_valid(raise_exception=True)
+        if request.user.spotify_basic_data is not None and not request.GET.get("force_authentication"):
             return Response(response, status=status.HTTP_208_ALREADY_REPORTED)
         
-        state = construct_state(session_key, redirect_url)
+        state = construct_state_value(request.user.session.session_key, request.GET['redirect_url'])
         authorize_url = auth_manager(state).get_authorize_url()
-        response['msg'] = response_msgs.authenticate_url_generated(redirect_url)
         response['authorize_url'] = authorize_url
 
         return Response(response, status=status.HTTP_200_OK)
@@ -47,17 +35,16 @@ class SpotifyOauthRedirect(APIView):
         # Get the info that passes from spotify state string
         try:
             state = request.GET['state']
-            params = deconstruct_state(state)
+            params = deconstruct_state_value(state)
             session_key = params['session_key'][0]
             redirect_url = params['redirect_url'][0]
-            
         except KeyError as key:
             print(f"not {key} provided in get")
             return Response(response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
         # If error, redirect with ?error=not_auth
         error = request.GET.get('error')
-        if not error is None:
+        if error is not None:
             return HttpResponseRedirect(redirect_url+f'?status={status.HTTP_401_UNAUTHORIZED}')
         del(error); del(params)
 
@@ -71,12 +58,11 @@ class SpotifyOauthRedirect(APIView):
         
         # Use the tokens to get the user'info
         tokens = user_auth_manager.get_cached_token()
-        
         data, new_tokens = get_current_user(tokens)
-        
         if new_tokens:
             tokens = new_tokens
         
+        # ? First implementation of spotipy error handler 
         if 'error' in data.keys():
             return HttpResponseRedirect(redirect_url+f'?status={status.HTTP_503_SERVICE_UNAVAILABLE}')
         del user_auth_manager
@@ -94,7 +80,6 @@ class SpotifyOauthRedirect(APIView):
         user = users[0]
 
         # Do a new SpotifyBasicData object
-        
         try:
             spotify_basic_data = SpotifyBasicData.objects.get(pk=data['id'])
             spotify_basic_data(

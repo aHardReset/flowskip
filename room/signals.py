@@ -30,5 +30,5 @@ def update_recommended_tracks(sender, instance, created, **kwargs):
 # Not implemented method, originally the api doesn't allow delete this tracks
 # But in a room that can be used in several days maybe this could work
 @receiver(post_delete, sender=apps.get_model("room", "SuccessTracks"))
-def delete_recommended_tracks(sender, instance, created, **kwargs):
+def delete_recommended_tracks(sender, **kwargs):
     pass

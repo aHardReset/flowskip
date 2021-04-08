@@ -1,73 +1,47 @@
 """Views for manage User and dependences
 """
-
 # Django
-from django.contrib.sessions.models import Session
-from django.core.exceptions import ObjectDoesNotExist
 
 # Rest Framework
 from rest_framework import status
+from rest_framework import exceptions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 # Models
-from user.models import Users, PaidUsers, Commerces
+from user import models as user_models
+
+from typing import Any
 
 # Utilities
 from spotify import api as spotify_api
-from spotify.snippets import update_data_changed, get_db_tokens, update_db_tokens
-from flowskip import response_msgs
+from spotify.snippets import update_data_changed
+from flowskip.auths import SessionAuthentication
 
 class UserManager(APIView):
-    """Class to manage the Users in the system
-    """
-
+    authentication_classes=[SessionAuthentication]
     def post(self, request, format=None):
-        """Create a new user
-
-        Args:
-            request ([type]): The request
-            format ([type], optional): [description]. Defaults to None.
-
-        Returns:
-            Response: Response object from APIView
-        """
         response = {}
 
-        try:
-            session_key = request.data["session_key"]
-            session = Session.objects.get(pk=session_key)
-        except KeyError as key:
-            response['msg'] = response_msgs.key_error(key)
-            return Response(response, status=status.HTTP_400_BAD_REQUEST)
-        except ObjectDoesNotExist as e:
-            response['msg'] = response['msg'] = str(e).replace("query", session_key)
-            return Response(response, status=status.HTTP_404_NOT_FOUND)
-
-        if Users.objects.filter(pk=session).exists():
-            response['msg'] = 'this user already exists'
-            return Response(response, status=status.HTTP_208_ALREADY_REPORTED)
+        session = user_models.Session.objects.get(pk=request.headers['session_key'])
         
-        user = Users(pk=session)
+        users = user_models.Users.objects.filter(pk=session)
+        if users.exists():
+            return Response(response, status=status.HTTP_208_ALREADY_REPORTED)
+        user = user_models.Users(pk=session)
         user.save()
-        response['msg'] = response_msgs.user_created(session_key)
         return Response(response, status=status.HTTP_201_CREATED)
 
     def delete(self, request, format=None):
         response = {}
 
-        try:
-            session_key = request.data["session_key"]
-            session = Session.objects.get(pk=session_key)
-        except KeyError as key:
-            response['msg'] = response_msgs.key_error(key)
-            return Response(response, status=status.HTTP_400_BAD_REQUEST)
-        except ObjectDoesNotExist as e:
-            response['msg'] = response['msg'] = str(e).replace("query", session_key)
+        session = user_models.Session.objects.get(pk=request.headers['session_key'])
+
+        users = user_models.Users.objects.filter(pk=session)
+        if not users.exists():
             return Response(response, status=status.HTTP_404_NOT_FOUND)
-        
-        user = Users.objects.filter(pk=session).delete()
-        response['msg'] = response_msgs.user_deleted(user[0], session_key)
+        user = users[0]
+        _ = user.delete()
         return Response(response, status=status.HTTP_204_NO_CONTENT)
 
     def get(self, request, format=None):
@@ -81,30 +55,19 @@ class UserManager(APIView):
             Response: Response object from APIView
         """
         response = {}
+        session = user_models.Session.objects.get(pk=request.headers['session_key'])
 
-        try:
-            session_key = request.GET["session_key"]
-            session = Session.objects.get(pk=session_key)
-            user = Users.objects.get(pk=session)
-            expire_date = user.session.expire_date
-            response['session_key'] = session_key
-            response['msg'] = f'user found and will be live up to {expire_date}'
-        except KeyError as key:
-            response['msg'] = response_msgs.key_error(key)
-            return Response(response, status=status.HTTP_400_BAD_REQUEST)
-        except ObjectDoesNotExist as e:
-            response['msg'] = response['msg'] = str(e).replace("query", session_key)
-            return Response(response, status=status.HTTP_200_OK)
+        users = user_models.Users.objects.filter(pk=session)
+        if not users.exists():
+            return Response(response, status=status.HTTP_404_NOT_FOUND)
+        request.user = users[0]
         
-        spotify_basic_data = not user.spotify_basic_data is None
-        has_room = not user.room is None
-        
-        if spotify_basic_data:
-            response['is_paid_user'] = PaidUsers.objects.filter(pk=user.spotify_basic_data.id).exists()
-            response['is_commerce'] = Commerces.objects.filter(pk=user.spotify_basic_data.id).exists()
-            response['user'] = self.get_status(user)
-        response['has_spotify_login_info'] = spotify_basic_data
-        response['has_room'] = has_room
+        if request.user.spotify_basic_data:
+            response['is_paid_user'] = user_models.PaidUsers.objects.filter(pk=request.user.spotify_basic_data.id).exists()
+            response['is_commerce'] = user_models.Commerces.objects.filter(pk=request.user.spotify_basic_data.id).exists()
+            response['user'] = self.get_status(request.user)
+        response['has_spotify_login_info'] = request.user.spotify_basic_data is not None
+        response['has_room'] = request.user.room is not None
 
         return Response(response, status=status.HTTP_200_OK)
     
@@ -143,6 +106,5 @@ class SessionManager(APIView):
         request.session.create()
         session_key = request.session.session_key
         
-        response['msg'] = response_msgs.session_started(session_key)
         response['session_key'] = session_key
         return Response(response, status=status.HTTP_201_CREATED)

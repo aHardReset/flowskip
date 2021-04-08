@@ -2,7 +2,7 @@ from urllib import parse
 
 ALLOWED_REDIRECTS = ['http://localhost:300']
 
-def construct_state(session_key:str, redirect_url:str, **kwargs) -> str:
+def construct_state_value(session_key:str, redirect_url:str, **kwargs) -> str:
     params = {
         'session_key': session_key,
         'redirect_url': redirect_url,
@@ -11,7 +11,7 @@ def construct_state(session_key:str, redirect_url:str, **kwargs) -> str:
     
     return parse.urlencode(params)
 
-def deconstruct_state(query: str) -> dict:
+def deconstruct_state_value(query: str) -> dict:
     return parse.parse_qs(query)
 
 def update_data_changed(spotify_basic_data: object ,data: dict)-> object:

@@ -4,13 +4,11 @@ from os import environ
 from os import remove
 import random
 import string
-from datetime import date, datetime, timedelta
-from time import mktime
+from datetime import datetime
 
 from spotify import snippets as spotify_snippets
 
 import spotipy
-from spotipy.client import Spotify
 
 CLIENT_ID = environ["SPOTIFY_FLOWSKIP_CLIENT_ID"]
 CLIENT_SECRET = environ["SPOTIFY_FLOWSKIP_CLIENT_SECRET"]

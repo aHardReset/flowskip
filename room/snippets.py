@@ -7,7 +7,7 @@ from django.db.utils import OperationalError
 import codecs
 
 def generate_unique_code(lenght:int = 6) -> str:
-    """Generates a random string that pretends to be the
+    """Generates a random string that pretends to be
     unique in terms of room.models.Rooms.code
 
     Args:
@@ -49,15 +49,15 @@ def save_track_in_db(Table: object, room: object, data: dict) -> None:
             room = room,
             track_id = room.track_id,
             uri = uri,
-            external_url = external_url if external_url else None,
-            album_name = album_name if album_name else None,
-            album_image_url = album_image_url if album_image_url else None,
-            artists_str = artists_str if artists_str else None,
-            name = name if name else None,
+            external_url = external_url or None,
+            album_name = album_name or None,
+            album_image_url = album_image_url or None,
+            artists_str = artists_str or None,
+            name = name or None,
         )
         track.save()
     except OperationalError as msg:
-        import translitcodec # noqa
+        import translitcodec #noqa
 
         name = codecs.encode(name, 'translit/long')
         album_name = codecs.encode(album_name, 'translit/long')
@@ -67,11 +67,11 @@ def save_track_in_db(Table: object, room: object, data: dict) -> None:
             room = room,
             track_id = room.track_id,
             uri = uri,
-            external_url = external_url if external_url else None,
-            album_name = album_name if album_name else None,
-            album_image_url = album_image_url if album_image_url else None,
-            artists_str = artists_str if artists_str else None,
-            name = name if name else None,
+            external_url = external_url or None,
+            album_name = album_name or None,
+            album_image_url = album_image_url or None,
+            artists_str = artists_str or None,
+            name = name or None,
         )
         track.save()
 

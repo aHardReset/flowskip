@@ -1,7 +1,6 @@
 from django.db import models
 from django.contrib.sessions.models import Session
 from django.core.validators import MinLengthValidator
-from rest_framework.views import APIView
 
 # Create your models here.
 class Users(models.Model):

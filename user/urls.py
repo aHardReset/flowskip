@@ -1,6 +1,7 @@
 """ Mapping users urls to user views """
 
 from django.urls import path
+from rest_framework.urlpatterns import format_suffix_patterns
 
 from user import views
 
@@ -29,3 +30,5 @@ urlpatterns = [
         name='start-session'
     ),
 ]
+
+urlpatterns = format_suffix_patterns(urlpatterns)
