@@ -5,4 +5,4 @@ class RoomConfig(AppConfig):
     name = 'room'
 
     def ready(self) -> None:
-        import room.signals #noqa
+        import room.signals # noqa

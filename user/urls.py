@@ -27,7 +27,17 @@ urlpatterns = [
     path(
         'session/start',
         view=views.SessionManager.as_view(),
-        name='start-session'
+        name='session-start'
+    ),
+    path(
+        'session/details',
+        view=views.SessionManager.as_view(),
+        name='session-details'
+    ),
+    path(
+        'session/delete',
+        view=views.SessionManager.as_view(),
+        name='session-delete'
     ),
 ]
 

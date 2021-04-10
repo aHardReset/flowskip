@@ -2,7 +2,7 @@ from django.db import models
 from django.contrib.sessions.models import Session
 from django.core.validators import MinLengthValidator
 
-# Create your models here.
+
 class Users(models.Model):
     session = models.OneToOneField(
         Session,
@@ -27,7 +27,8 @@ class Users(models.Model):
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
-    
+
+
 class PaidUsers(models.Model):
     id = models.CharField(
         max_length=64,
@@ -43,10 +44,11 @@ class PaidUsers(models.Model):
         default=None,
         help_text="code for personal room"
     )
-    
+
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
+
 
 class Commerces(models.Model):
     id = models.CharField(

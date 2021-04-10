@@ -1,12 +1,19 @@
-import random
-import json
-import string
+"""Useful functions for anaging room views"""
+
+# Django
 from django.apps import apps
 from django.utils import timezone
 from django.db.utils import OperationalError
-import codecs
 
-def generate_unique_code(lenght:int = 6) -> str:
+# Python standar modules
+import codecs
+import random
+import json
+import string
+from typing import Type, List
+
+
+def generate_unique_code(lenght: int = 6) -> str:
     """Generates a random string that pretends to be
     unique in terms of room.models.Rooms.code
 
@@ -16,7 +23,7 @@ def generate_unique_code(lenght:int = 6) -> str:
     Returns:
         str: The generated code
     """
-    Rooms = apps.get_model('room','Rooms')
+    Rooms = apps.get_model('room', 'Rooms')
     PaidUsers = apps.get_model('user', 'PaidUsers')
     Commerces = apps.get_model('user', 'Commerces')
     while True:
@@ -24,58 +31,76 @@ def generate_unique_code(lenght:int = 6) -> str:
             random.choices(string.ascii_uppercase, k=lenght),
         )
         lenght += 1
-        anonymous = Rooms.objects.filter(code = code).exists()
-        paid_users = PaidUsers.objects.filter(exclusive_code = code).exists()
-        commerce = Commerces.objects.filter(exclusive_code = code).exists() 
+        anonymous = Rooms.objects.filter(code=code).exists()
+        paid_users = PaidUsers.objects.filter(exclusive_code=code).exists()
+        commerce = Commerces.objects.filter(exclusive_code=code).exists()
         if not anonymous or paid_users or commerce:
             break
-        
     return code
 
-def save_track_in_db(Table: object, room: object, data: dict) -> None:
-    uri = data['uri']
-    name = data['name']
-    album_name = data['album']['name']
-    images = data['album']['images']
+
+def save_track_in_db(Table: Type, room: object, track: dict) -> None:
+    """Takes an spotify api track object and saves it
+    to our database
+
+    Args:
+        Table (Type): table class
+        room (object): room which the track belongs
+        track (dict): spotify track api
+    """
+
+    uri = track['uri']
+    name = track['name']
+    album_name = track['album']['name']
+    images = track['album']['images']
     index = len(images) // 2
     album_image_url = images[index]['url']
     artists_str = ", ".join([
-        artist['name'] for artist 
-        in data['artists']
+        artist['name'] for artist
+        in track['artists']
     ])
-    external_url = data['external_urls']['spotify']
+    external_url = track['external_urls']['spotify']
     try:
         track = Table(
-            room = room,
-            track_id = room.track_id,
-            uri = uri,
-            external_url = external_url or None,
-            album_name = album_name or None,
-            album_image_url = album_image_url or None,
-            artists_str = artists_str or None,
-            name = name or None,
+            room=room,
+            track_id=room.track_id,
+            uri=uri,
+            external_url=external_url or None,
+            album_name=album_name or None,
+            album_image_url=album_image_url or None,
+            artists_str=artists_str or None,
+            name=name or None,
         )
         track.save()
-    except OperationalError as msg:
-        import translitcodec #noqa
+    except OperationalError:
+        import translitcodec # noqa
 
         name = codecs.encode(name, 'translit/long')
         album_name = codecs.encode(album_name, 'translit/long')
         artists_str = codecs.encode(artists_str, 'translit/long')
 
         track = Table(
-            room = room,
-            track_id = room.track_id,
-            uri = uri,
-            external_url = external_url or None,
-            album_name = album_name or None,
-            album_image_url = album_image_url or None,
-            artists_str = artists_str or None,
-            name = name or None,
+            room=room,
+            track_id=room.track_id,
+            uri=uri,
+            external_url=external_url or None,
+            album_name=album_name or None,
+            album_image_url=album_image_url or None,
+            artists_str=artists_str or None,
+            name=name or None,
         )
         track.save()
 
+
 def register_track(Table: object, room: object, data: dict) -> None:
+    """Check if a track is valid to be added, A track
+    is not valid if the last row is the same track
+
+    Args:
+        Table (Type): Table
+        room (object): [description]
+        data (dict): [description]
+    """
     last_track = Table.objects.last()
     if last_track:
         if last_track.track_id != data['item']['id']:
@@ -83,8 +108,19 @@ def register_track(Table: object, room: object, data: dict) -> None:
     else:
         save_track_in_db(Table, room, data['item'])
 
+
 def clean_playback(room: object, data: dict) -> object:
-    
+    """Cleans the spotify playback object and
+    saves the result to the database
+
+    Args:
+        room (object): Rooms instance
+        data (dict): Spotify playback object
+
+    Returns:
+        object: Flowskip playback object
+    """
+
     if data:
         del data['timestamp']
         del data['context']
@@ -102,55 +138,87 @@ def clean_playback(room: object, data: dict) -> object:
         'current_playing_track',
         'modified_at',
     ])
-    
     return room
 
-def construct_participant(spotify_basic_data: object, user: object)-> dict:
+
+def construct_participant(user: object) -> dict:
+    """constructs either an anonymous user or a logged user
+
+    Args:
+        spotify_basic_data (object): SpotifyBasicData instance
+        user (object): [description]
+
+    Raises:
+        ValueError: [description]
+
+    Returns:
+        dict: [description]
+    """
     Parent = apps.get_model("spotify", "SpotifyBasicData")
-    if not isinstance(spotify_basic_data, Parent):
+    if not isinstance(user.spotify_basic_data, Parent):
         raise ValueError("I need spotify basic data")
-    
     return {
-        'is_authenticated': True if spotify_basic_data else False,
-        'id': spotify_basic_data.id if spotify_basic_data else user.session.session_key[-6:],
-        'display_name': spotify_basic_data.display_name if spotify_basic_data else None,
-        'image_url': spotify_basic_data.image_url if spotify_basic_data else None,
-        'external-url' : spotify_basic_data.external_url if spotify_basic_data else None,
-        'product': spotify_basic_data.product if spotify_basic_data else None,
+        'is_authenticated': True if user.spotify_basic_data else False,
+        'id': user.spotify_basic_data.id or user.session.session_key[-6:],
+        'display_name': user.spotify_basic_data.display_name or None,
+        'image_url': user.spotify_basic_data.image_url or None,
+        'external-url': user.spotify_basic_data.external_url or None,
+        'product': user.spotify_basic_data.product or None,
     }
 
+
 def construct_participants(users: list[object]) -> list[dict]:
+    """construct a list of participant given a queryset
+
+    Args:
+        users (list[object]): Queryset with users
+
+    Raises:
+        TypeError: Only works with users
+
+    Returns:
+        list[dict]: Cleanned list of user
+    """
     Parent = apps.get_model("user", "Users")
     participants = []
     for user in users:
         if not isinstance(user, Parent):
             raise TypeError("I need a user")
 
-        spotify_basic_data = user.spotify_basic_data
         participants.append(
-            construct_participant(spotify_basic_data, user)
+            construct_participant(user)
         )
-
     return participants
-    
+
+
 def calculate_user_deltas(
-    in_db: list[dict], 
-    in_req: list[dict],
+    in_db: List[dict],
+    in_req: List[dict],
     new: bool = True,
     gone: bool = True
-    ) -> dict:
+) -> dict:
+    """Takes two lists and compare to do diffs
 
+    Args:
+        in_db (List[dict]): A list
+        in_req (List[dict]): B list
+        new (bool, optional): will return A - B ?. Defaults to True.
+        gone (bool, optional): will return B - A ?. Defaults to True.
+
+    Returns:
+        dict: **new if new, **gone if gone
+    """
     response = {}
     response['all'] = in_db
 
     in_db_set = set()
     for each in in_db:
         in_db_set.add(json.dumps(each, sort_keys=True))
-    
+
     in_req_set = set()
     for each in in_req:
         in_req_set.add(json.dumps(each, sort_keys=True))
-    
+
     if new:
         new_set = in_db_set - in_req_set
         new_set = [json.loads(p) for p in new_set]
@@ -159,8 +227,4 @@ def calculate_user_deltas(
         gone_set = in_req_set - in_db_set
         gone_set = [json.loads(p) for p in gone_set]
         response['gone'] = gone_set
-    
     return response
-    
-def query_to_list_dict(query: list, Serializer: object) -> list[dict]:
-    return [dict(Serializer(i).data) for i in query]

@@ -1,10 +1,10 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
-from django.db.models.fields.related import ForeignKey
 from room.snippets import generate_unique_code
 
 created_at = models.DateTimeField(auto_now_add=True)
 modified_at = models.DateTimeField(auto_now=True)
+
 
 class Rooms(models.Model):
     """A model that stores the room configuration
@@ -62,10 +62,11 @@ class Rooms(models.Model):
     created_at = created_at
     modified_at = modified_at
 
+
 class Tracks(models.Model):
     class Meta:
         abstract = True
-    
+
     room = models.ForeignKey(
         'room.Rooms',
         on_delete=models.CASCADE,
@@ -112,8 +113,9 @@ class Tracks(models.Model):
         blank=False,
         null=True,
         help_text="artist's names, coma separated"
-    ) 
+    )
     created_at = created_at
+
 
 class VotesToSkip(Tracks):
     user = models.OneToOneField(
@@ -122,11 +124,14 @@ class VotesToSkip(Tracks):
         help_text="who voted to skip the track",
     )
 
+
 class SuccessTracks(Tracks):
     pass
 
+
 class SkippedTracks(Tracks):
     pass
+
 
 class RecommendedTracks(Tracks):
     pass

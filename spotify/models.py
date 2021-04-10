@@ -1,6 +1,7 @@
 """Models for spotify app"""
 from django.db import models
 
+
 class SpotifyBasicData(models.Model):
     """A model with tokens, identifiers and selected
     non-esencial quick access user info from spotify
@@ -65,6 +66,6 @@ class SpotifyBasicData(models.Model):
         help_text="maximum datetime to use the access_token"
     )
 
-    #Metadata
+    # Metadata
     modified_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)

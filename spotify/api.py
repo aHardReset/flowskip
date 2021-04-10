@@ -15,7 +15,8 @@ CLIENT_SECRET = environ["SPOTIFY_FLOWSKIP_CLIENT_SECRET"]
 REDIRECT_URI = "http://127.0.0.1:8000/spotify/spotify-oauth-redirect"
 SCOPE = 'user-read-private user-read-playback-state user-modify-playback-state user-read-currently-playing user-library-read'
 
-def auth_manager(state:str, username:str = '')->spotipy.SpotifyOAuth:
+
+def auth_manager(state: str, username: str = '') -> spotipy.SpotifyOAuth:
     return spotipy.SpotifyOAuth(
         client_id=CLIENT_ID,
         client_secret=CLIENT_SECRET,
@@ -27,25 +28,31 @@ def auth_manager(state:str, username:str = '')->spotipy.SpotifyOAuth:
         username=username
     )
 
-def delete_cached_token(username:str)->None:
+
+def delete_cached_token(username: str) -> None:
     try:
         file = settings.BASE_DIR / ('.cache-' + username)
         remove(file)
     except Exception as e:
         print(f"WARN: deleting cached_token {e}")
 
-def timestamp_to_datetime(timestamp: float)->datetime:
+
+def timestamp_to_datetime(timestamp: float) -> datetime:
     return datetime.fromtimestamp(timestamp)
 
-def get_tokens(tokens: dict)->dict:
+
+def get_tokens(tokens: dict) -> dict:
     if not isinstance(tokens['expires_at'], datetime):
         tokens['expires_at'] = datetime.utcfromtimestamp(tokens['expires_at'])
-        tokens['expires_at'] = timezone.make_aware(tokens['expires_at'], timezone.get_current_timezone())
+        tokens['expires_at'] = timezone.make_aware(
+            tokens['expires_at'],
+            timezone.get_current_timezone()
+        )
 
     username = ''.join(random.choices(string.ascii_uppercase + string.ascii_lowercase, k=4),)
 
     user_auth_manager = auth_manager(username, username=username)
-    
+
     if (tokens['expires_at'] - timezone.now()).total_seconds() < 60:
         user_auth_manager.refresh_access_token(tokens['refresh_token'])
         tokens = user_auth_manager.get_cached_token()
@@ -54,8 +61,9 @@ def get_tokens(tokens: dict)->dict:
         tokens['expires_at'] = timezone.make_aware(naive, timezone.get_current_timezone())
     return tokens
 
-def get_current_user(tokens: dict)-> tuple:
-    
+
+def get_current_user(tokens: dict) -> tuple:
+
     new_tokens = get_tokens(tokens)
     sp = spotipy.Spotify(auth=new_tokens['access_token'])
     data = sp.current_user()
@@ -64,11 +72,9 @@ def get_current_user(tokens: dict)-> tuple:
     return (data, new_tokens)
 
 
-
-def api_manager(spotify_basic_data: object)->spotipy.Spotify:
+def api_manager(spotify_basic_data: object) -> spotipy.Spotify:
     db_tokens = spotify_snippets.get_db_tokens(spotify_basic_data)
     new_tokens = get_tokens(db_tokens)
     if db_tokens != new_tokens:
         spotify_snippets.update_db_tokens(spotify_basic_data, new_tokens)
     return spotipy.Spotify(auth=new_tokens['access_token'])
-

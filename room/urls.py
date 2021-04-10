@@ -1,18 +1,23 @@
-from user import views
+"""flowskip.room URL Configuration"""
+
+# Django
 from django.urls import path
+from rest_framework.urlpatterns import format_suffix_patterns
+
+# Views
 from room import views
 
 urlpatterns = [
     # Room Manager
     path(
-        'create-personal',
+        'create',
         view=views.RoomManager.as_view(),
-        name='create-personal'
+        name='create'
     ),
     path(
-        'create-commerce',
+        'create-advanced',
         view=views.RoomManager.as_view(),
-        name='create-commerce'
+        name='create-advanced'
     ),
     path(
         'details',
@@ -22,7 +27,7 @@ urlpatterns = [
 
     # Participants manager
     path(
-        'participant/join',
+        'participants/join',
         view=views.ParticipantManager.as_view(),
         name='join'
     ),
@@ -49,3 +54,5 @@ urlpatterns = [
         name='tracks'
     ),
 ]
+
+urlpatterns = format_suffix_patterns(urlpatterns)
