@@ -24,6 +24,11 @@ urlpatterns = [
         view=views.RoomManager.as_view(),
         name='details'
     ),
+    path(
+        'update',
+        view=views.RoomManager.as_view(),
+        name='update'
+    ),
 
     # Participants manager
     path(
@@ -52,6 +57,11 @@ urlpatterns = [
         'state/tracks',
         view=views.StateManager.as_view(),
         name='tracks'
+    ),
+    path(
+        'state/add-to-queue',
+        view=views.StateManager.as_view(),
+        name='add-to-queue',
     ),
 ]
 

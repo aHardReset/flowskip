@@ -17,7 +17,7 @@ from flowskip.auths import UserAuthentication
 # Utilities
 from room import snippets as room_snippets
 from spotify import api as spotify_api
-
+from room.decorators import is_host_required, in_room_required, is_authenticated_in_spotify
 
 TOO_LATE = 50
 
@@ -25,20 +25,20 @@ TOO_LATE = 50
 class RoomManager(APIView):
     authentication_classes = [UserAuthentication]
 
+    @in_room_required
     def get(self, request, format=None):
         response = {}
 
         room_serializers.CodeSerializer(data=request.GET).is_valid(raise_exception=True)
-        if request.user.room is None:
-            raise exceptions.NotFound("This user don't have a room")
 
         # Checks if the user code is the same as the request
-        response = room_serializers.RoomSerializer(request.user.room).data
+        response = room_serializers.RoomInfoSerializer(request.user.room).data
         host_seesion_key = request.user.room.host.session.session_key
         user_session_key = request.user.session.session_key
         response['user_is_host'] = host_seesion_key == user_session_key
         return Response(response, status=status.HTTP_200_OK)
 
+    @is_authenticated_in_spotify
     def post(self, request, format=None) -> Response:
         response = {}
 
@@ -110,6 +110,20 @@ class RoomManager(APIView):
         )
         room.save()
         return response, status.HTTP_201_CREATED
+
+    @in_room_required
+    @is_host_required
+    def patch(self, request, format=None):
+        response = {}
+        room_serializers.CreateRoomSerializer(data=request.data).is_valid(raise_exception=True)
+        request.user.room.guests_can_pause = request.data['guests_can_pause']
+        request.user.room.votes_to_skip = request.data['votes_to_skip']
+        request.user.room.save(update_fields=[
+            'guests_can_pause',
+            'votes_to_skip',
+        ])
+
+        return Response(response, status=status.HTTP_200_OK)
 
 
 class ParticipantManager(APIView):
@@ -256,6 +270,11 @@ class StateManager(APIView):
             for i
             in query
         ]
+        query = room_models.QueueTracks.objects.filter(room=room)
+        response['queue_tracks'] = [
+            dict(room_serializers.QueueTracksSerializer(i).data)
+            for i in query
+        ]
         return response, status.HTTP_200_OK
 
     def patch(self, request, format=None):
@@ -268,9 +287,8 @@ class StateManager(APIView):
         except ObjectDoesNotExist:
             return Response(response, status=status.HTTP_404_NOT_FOUND)
 
-        sp_api_tunel = spotify_api.api_manager(room.host.spotify_basic_data)
-        # is_host = room.host.session.session_key == request.user.session.session_key
         if (timezone.now() - room.modified_at).total_seconds() > 2:
+            sp_api_tunel = spotify_api.api_manager(room.host.spotify_basic_data)
             data = sp_api_tunel.current_playback()
             room = room_snippets.clean_playback(room, data)
         response['current_playback'] = room.current_playing_track
@@ -279,6 +297,10 @@ class StateManager(APIView):
             progress_ms = response['current_playback']['progress_ms']
             durarion_ms = response['current_playback']['item']['duration_ms']
             same_track = response['current_playback']['item']['id'] == request.data['track_id']
+            if not same_track:
+                room_models.QueueTracks.objects.filter(
+                    track_id=response['current_playback']['item']['id']
+                )[0].delete()
             if (progress_ms / durarion_ms) * 100 > TOO_LATE and same_track:
                 room_snippets.register_track(
                     room_models.SuccessTracks,
@@ -286,16 +308,16 @@ class StateManager(APIView):
                     response['current_playback']
                 )
 
-        participants_in_req = request.data.get('participants', [])
+        participants_in_req = request.data.get('participants')
         if type(participants_in_req) is list:
             participants_in_db = user_models.Users.objects.filter(room=room)
             participants_in_db = room_snippets.construct_participants(participants_in_db)
-            response['participants'] = room_snippets.calculate_user_deltas(
+            response['participants'] = room_snippets.calculate_dict_deltas(
                 participants_in_db,
                 participants_in_req
             )
 
-        votes_in_req = request.data.get('votes', [])
+        votes_in_req = request.data.get('votes')
         if type(votes_in_req) is list:
             votes_in_db = room_models.VotesToSkip.objects.filter(
                 room=room
@@ -303,10 +325,84 @@ class StateManager(APIView):
 
             votes_in_db = [vote.user for vote in votes_in_db]
             votes_in_db = room_snippets.construct_participants(votes_in_db)
-            response['votes_to_skip'] = room_snippets.calculate_user_deltas(
+            response['votes_to_skip'] = room_snippets.calculate_dict_deltas(
                 votes_in_db,
                 votes_in_req,
                 gone=False
             )
+
+        queue_in_req = request.data.get('queue')
+        if type(queue_in_req) is list:
+            queue_in_db = room_models.QueueTracks.objects.filter(room=room)
+            queue_in_db = [
+                dict(room_serializers.QueueTracksSerializer(i).data)
+                for i in queue_in_db
+            ]
+            response['queue_tracks'] = room_snippets.calculate_dict_deltas(
+                queue_in_db,
+                queue_in_req,
+                gone=False,
+            )
         response_code = status.HTTP_200_OK
         return Response(response, status=response_code)
+
+    @in_room_required
+    def put(self, request, format=None):
+        response = {}
+        room_serializers.AddToQueueSerializer(data=request.data).is_valid(raise_exception=True)
+        recommended_tracks_ids = set(
+            query['track_id']
+            for query
+            in room_models.RecommendedTracks.objects.values("track_id")
+        )
+        if not request.data['track_id'] in recommended_tracks_ids and not request.user.is_host:
+            raise exceptions.NotFound("track_id not recommended")
+        sp_api_tunel = spotify_api.api_manager(request.user.room.host.spotify_basic_data)
+        sp_api_tunel.add_to_queue(request.data['track_id'])
+        deleted_recommended_track = room_models.RecommendedTracks.objects.filter(
+            room=request.user.room
+        ).filter(track_id=request.data['track_id'])
+        to_queue = deleted_recommended_track.values()[0]
+        _ = deleted_recommended_track.delete()
+
+        uri = to_queue['uri']
+        name = to_queue['name']
+        album_name = to_queue['album_name']
+        album_image_url = to_queue['album_image_url']
+        track_id = to_queue['track_id']
+        artists_str = to_queue['artists_str']
+        external_url = to_queue['external_url']
+
+        from django.db.utils import OperationalError
+        try:
+            track = room_models.QueueTracks(
+                room=request.user.room,
+                track_id=track_id,
+                uri=uri,
+                external_url=external_url or None,
+                album_name=album_name or None,
+                album_image_url=album_image_url or None,
+                artists_str=artists_str or None,
+                name=name or None,
+            )
+            track.save()
+        except OperationalError:
+            import codecs
+            import translitcodec # noqa
+
+            name = codecs.encode(name, 'translit/long')
+            album_name = codecs.encode(album_name, 'translit/long')
+            artists_str = codecs.encode(artists_str, 'translit/long')
+
+            track = room_models.QueueTracks(
+                room=request.user.room,
+                track_id=track_id,
+                uri=uri,
+                external_url=external_url or None,
+                album_name=album_name or None,
+                album_image_url=album_image_url or None,
+                artists_str=artists_str or None,
+                name=name or None,
+            )
+            track.save()
+        return Response(response, status=status.HTTP_201_CREATED)

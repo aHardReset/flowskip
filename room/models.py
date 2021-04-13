@@ -135,3 +135,7 @@ class SkippedTracks(Tracks):
 
 class RecommendedTracks(Tracks):
     pass
+
+
+class QueueTracks(Tracks):
+    pass

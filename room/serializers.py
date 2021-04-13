@@ -3,6 +3,9 @@ from room import models as room_models
 
 
 class CreateRoomSerializer(serializers.ModelSerializer):
+    guests_can_pause = serializers.BooleanField()
+    votes_to_skip = serializers.IntegerField()
+
     class Meta:
         model = room_models.Rooms
         fields = (
@@ -11,13 +14,19 @@ class CreateRoomSerializer(serializers.ModelSerializer):
         )
 
 
-class RoomSerializer(serializers.ModelSerializer):
+class RoomInfoSerializer(serializers.ModelSerializer):
     class Meta:
         model = room_models.Rooms
         fields = (
             'code',
             'guests_can_pause',
+            'votes_to_skip',
+
         )
+
+
+class AddToQueueSerializer(serializers.Serializer):
+    track_id = serializers.CharField()
 
 
 class SuccessTracksSerializer(serializers.ModelSerializer):
@@ -37,6 +46,12 @@ class SkippedTracksSerializer(serializers.ModelSerializer):
 class RecommendedTracksSerializer(serializers.ModelSerializer):
     class Meta:
         model = room_models.RecommendedTracks
+        exclude = ('room', 'id')
+
+
+class QueueTracksSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = room_models.QueueTracks
         exclude = ('room', 'id')
 
 

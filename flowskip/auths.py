@@ -25,6 +25,9 @@ class UserAuthentication(authentication.BaseAuthentication):
             raise exceptions.NotAuthenticated("you need a session key")
         except user_models.Users.DoesNotExist:
             raise exceptions.NotFound("user doesn't exists")
+
+        if user.room is not None:
+            user.is_host = session_key == user.room.host.session.session_key
         return (user, None)
 
 

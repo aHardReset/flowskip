@@ -55,6 +55,7 @@ def save_track_in_db(Table: Type, room: object, track: dict) -> None:
     images = track['album']['images']
     index = len(images) // 2
     album_image_url = images[index]['url']
+    track_id = track['id']
     artists_str = ", ".join([
         artist['name'] for artist
         in track['artists']
@@ -63,7 +64,7 @@ def save_track_in_db(Table: Type, room: object, track: dict) -> None:
     try:
         track = Table(
             room=room,
-            track_id=room.track_id,
+            track_id=track_id,
             uri=uri,
             external_url=external_url or None,
             album_name=album_name or None,
@@ -81,7 +82,7 @@ def save_track_in_db(Table: Type, room: object, track: dict) -> None:
 
         track = Table(
             room=room,
-            track_id=room.track_id,
+            track_id=track_id,
             uri=uri,
             external_url=external_url or None,
             album_name=album_name or None,
@@ -191,13 +192,13 @@ def construct_participants(users: list[object]) -> list[dict]:
     return participants
 
 
-def calculate_user_deltas(
+def calculate_dict_deltas(
     in_db: List[dict],
     in_req: List[dict],
     new: bool = True,
     gone: bool = True
 ) -> dict:
-    """Takes two lists and compare to do diffs
+    """Takes two List[dict] and compare to do diffs
 
     Args:
         in_db (List[dict]): A list
