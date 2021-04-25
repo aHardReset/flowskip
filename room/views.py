@@ -10,7 +10,8 @@ from rest_framework.response import Response
 
 # Models
 from room import serializers as room_serializers
-from room import models as room_models
+from room.serializers import TracksStateSerializer
+from room.models import Rooms, VotesToSkip, TracksState
 from user import models as user_models
 from flowskip.auths import UserAuthentication
 
@@ -66,7 +67,7 @@ class RoomManager(APIView):
         except ObjectDoesNotExist:
             paid_details = None
 
-        room = room_models.Rooms(
+        room = Rooms(
             host=request.user,
             guests_can_pause=request.data['guests_can_pause'],
             votes_to_skip=request.data['votes_to_skip'],
@@ -89,7 +90,7 @@ class RoomManager(APIView):
 
         # ! Add the geolocalization filter
 
-        rooms = room_models.Rooms.objects.filter(pk=request.user)
+        rooms = Rooms.objects.filter(pk=request.user)
         if rooms.exists():
             room = rooms[0]
             room.code = paid_details.exclusive_code
@@ -102,7 +103,7 @@ class RoomManager(APIView):
             ])
             return response, status.HTTP_208_ALREADY_REPORTED
 
-        room = room_models.Rooms(
+        room = Rooms(
             host=request.user,
             code=paid_details.exclusive_code,
             guests_can_pause=request.data['guests_can_pause'],
@@ -137,7 +138,7 @@ class ParticipantManager(APIView):
             return Response(response, status=status.HTTP_208_ALREADY_REPORTED)
 
         try:
-            room = room_models.Rooms.objects.get(code=request.data['code'])
+            room = Rooms.objects.get(code=request.data['code'])
         except ObjectDoesNotExist:
             return Response(response, status=status.HTTP_404_NOT_FOUND)
 
@@ -160,7 +161,7 @@ class ParticipantManager(APIView):
             return Response(response, status=status.HTTP_404_NOT_FOUND)
 
         if request.user.room.host.session.session_key == request.user.session.session_key:
-            _ = room_models.Rooms.objects.filter(host=request.user).delete()
+            _ = Rooms.objects.filter(host=request.user).delete()
             return Response(response, status=status.HTTP_204_NO_CONTENT)
 
         request.user.room = None
@@ -195,7 +196,7 @@ class StateManager(APIView):
 
         room_serializers.TrackIdSerializer(data=request.data).is_valid(raise_exception=True)
         try:
-            room = room_models.Rooms.objects.get(code=request.data['code'])
+            room = Rooms.objects.get(code=request.data['code'])
         except ObjectDoesNotExist:
             return Response(response, status=status.HTTP_200_OK)
 
@@ -209,17 +210,17 @@ class StateManager(APIView):
             response['msg'] = "too late to vote"
             return response, status.HTTP_410_GONE
 
-        room_votes = room_models.VotesToSkip.objects.filter(room=room)
+        room_votes = VotesToSkip.objects.filter(room=room)
         room_votes.exclude(track_id=room.track_id).delete()
         if room.track_id != request.data['track_id']:
             return response, status.HTTP_301_MOVED_PERMANENTLY
 
-        track_votes = room_models.VotesToSkip.objects.filter(track_id=request.data['track_id'])
+        track_votes = VotesToSkip.objects.filter(track_id=request.data['track_id'])
         votes = track_votes.count()
         for user in track_votes.values('user'):
             if request.user.session.session_key == user['user']:
                 return response, status.HTTP_208_ALREADY_REPORTED
-        vote = room_models.VotesToSkip(room=room, user=request.user, track_id=room.track_id)
+        vote = VotesToSkip(room=room, user=request.user, track_id=room.track_id)
         vote.save()
         votes += 1
 
@@ -228,7 +229,7 @@ class StateManager(APIView):
             # El verdugo -> has hecho el voto de gracia
             sp_api = spotify_api.api_manager(room.host.spotify_basic_data)
             sp_api.next_track()
-            room_snippets.register_track(room_models.SkippedTracks, room, current_playing_track)
+            room_snippets.register_track_in_state("SK", room, current_playing_track)
         return response, status.HTTP_201_CREATED
 
     def get(self, request, format=None):
@@ -248,31 +249,31 @@ class StateManager(APIView):
     def _get_tracks(request):
         response = {}
         try:
-            room = room_models.Rooms.objects.get(code=request.GET['code'])
+            room = Rooms.objects.get(code=request.GET['code'])
         except ObjectDoesNotExist:
             return Response(response, status=status.HTTP_200_OK)
         # return [dict(Serializer(i).data) for i in query]
-        query = room_models.SuccessTracks.objects.filter(room=room)
+        query = TracksState.objects.filter(room=room).filter(state="SU")
         response['success_tracks'] = [
-            dict(room_serializers.SuccessTracksSerializer(i).data)
+            dict(TracksStateSerializer(i).data)
             for i
             in query
         ]
-        query = room_models.SkippedTracks.objects.filter(room=room)
+        query = TracksState.objects.filter(room=room).filter(state="SK")
         response['skipped_tracks'] = [
-            dict(room_serializers.SkippedTracksSerializer(i).data)
+            dict(TracksStateSerializer(i).data)
             for i
             in query
         ]
-        query = room_models.RecommendedTracks.objects.filter(room=room)
+        query = TracksState.objects.filter(room=room).filter(state="RE")
         response['recommended_tracks'] = [
-            dict(room_serializers.RecommendedTracksSerializer(i).data)
+            dict(TracksStateSerializer(i).data)
             for i
             in query
         ]
-        query = room_models.QueueTracks.objects.filter(room=room)
+        query = TracksState.objects.filter(room=room).filter(state="QU")
         response['queue_tracks'] = [
-            dict(room_serializers.QueueTracksSerializer(i).data)
+            dict(TracksStateSerializer(i).data)
             for i in query
         ]
         return response, status.HTTP_200_OK
@@ -283,7 +284,7 @@ class StateManager(APIView):
             data=request.data
         ).is_valid(raise_exception=True)
         try:
-            room = room_models.Rooms.objects.get(code=request.data['code'])
+            room = Rooms.objects.get(code=request.data['code'])
         except ObjectDoesNotExist:
             return Response(response, status=status.HTTP_404_NOT_FOUND)
 
@@ -298,12 +299,18 @@ class StateManager(APIView):
             durarion_ms = response['current_playback']['item']['duration_ms']
             same_track = response['current_playback']['item']['id'] == request.data['track_id']
             if not same_track:
-                room_models.QueueTracks.objects.filter(
+                track_in_queue = TracksState.objects.filter(
+                    room=room
+                ).filter(
+                    state="QU"
+                ).filter(
                     track_id=response['current_playback']['item']['id']
-                )[0].delete()
+                )
+                if track_in_queue.exists():
+                    track_in_queue[0].delete()
             if (progress_ms / durarion_ms) * 100 > TOO_LATE and same_track:
-                room_snippets.register_track(
-                    room_models.SuccessTracks,
+                room_snippets.register_track_in_state(
+                    'SU',
                     room,
                     response['current_playback']
                 )
@@ -319,7 +326,7 @@ class StateManager(APIView):
 
         votes_in_req = request.data.get('votes')
         if type(votes_in_req) is list:
-            votes_in_db = room_models.VotesToSkip.objects.filter(
+            votes_in_db = VotesToSkip.objects.filter(
                 room=room
             ).filter(track_id=room.track_id)
 
@@ -333,9 +340,9 @@ class StateManager(APIView):
 
         queue_in_req = request.data.get('queue')
         if type(queue_in_req) is list:
-            queue_in_db = room_models.QueueTracks.objects.filter(room=room)
+            queue_in_db = TracksState.objects.filter(room=room).filter(state="QU")
             queue_in_db = [
-                dict(room_serializers.QueueTracksSerializer(i).data)
+                dict(TracksStateSerializer(i).data)
                 for i in queue_in_db
             ]
             response['queue_tracks'] = room_snippets.calculate_dict_deltas(
@@ -350,18 +357,20 @@ class StateManager(APIView):
     def put(self, request, format=None):
         response = {}
         room_serializers.AddToQueueSerializer(data=request.data).is_valid(raise_exception=True)
+        recommended_tracks = TracksState.objects.filter(
+            room=request.user.room
+        ).filter(
+            state="RE"
+        )
         recommended_tracks_ids = set(
             query['track_id']
             for query
-            in room_models.RecommendedTracks.objects.values("track_id")
-        )
+            in recommended_tracks.values("track_id"))
         if not request.data['track_id'] in recommended_tracks_ids and not request.user.is_host:
             raise exceptions.NotFound("track_id not recommended")
         sp_api_tunel = spotify_api.api_manager(request.user.room.host.spotify_basic_data)
         sp_api_tunel.add_to_queue(request.data['track_id'])
-        deleted_recommended_track = room_models.RecommendedTracks.objects.filter(
-            room=request.user.room
-        ).filter(track_id=request.data['track_id'])
+        deleted_recommended_track = recommended_tracks.filter(track_id=request.data['track_id'])
         to_queue = deleted_recommended_track.values()[0]
         _ = deleted_recommended_track.delete()
 
@@ -375,7 +384,7 @@ class StateManager(APIView):
 
         from django.db.utils import OperationalError
         try:
-            track = room_models.QueueTracks(
+            track = TracksState(
                 room=request.user.room,
                 track_id=track_id,
                 uri=uri,
@@ -384,6 +393,7 @@ class StateManager(APIView):
                 album_image_url=album_image_url or None,
                 artists_str=artists_str or None,
                 name=name or None,
+                state="QU",
             )
             track.save()
         except OperationalError:
@@ -394,7 +404,7 @@ class StateManager(APIView):
             album_name = codecs.encode(album_name, 'translit/long')
             artists_str = codecs.encode(artists_str, 'translit/long')
 
-            track = room_models.QueueTracks(
+            track = TracksState(
                 room=request.user.room,
                 track_id=track_id,
                 uri=uri,
@@ -403,6 +413,7 @@ class StateManager(APIView):
                 album_image_url=album_image_url or None,
                 artists_str=artists_str or None,
                 name=name or None,
+                state="QU",
             )
             track.save()
         return Response(response, status=status.HTTP_201_CREATED)

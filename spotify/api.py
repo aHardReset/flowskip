@@ -13,7 +13,12 @@ import spotipy
 CLIENT_ID = environ["SPOTIFY_FLOWSKIP_CLIENT_ID"]
 CLIENT_SECRET = environ["SPOTIFY_FLOWSKIP_CLIENT_SECRET"]
 REDIRECT_URI = "http://127.0.0.1:8000/spotify/spotify-oauth-redirect"
-SCOPE = 'user-read-private user-read-playback-state user-modify-playback-state user-read-currently-playing user-library-read'
+scopes = [
+    'user-modify-playback-state',
+    'user-read-playback-state',
+    'user-read-private',
+]
+SCOPE = " ".join(scopes)
 
 
 def auth_manager(state: str, username: str = '') -> spotipy.SpotifyOAuth:

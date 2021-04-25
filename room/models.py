@@ -63,7 +63,7 @@ class Rooms(models.Model):
     modified_at = modified_at
 
 
-class Tracks(models.Model):
+class TracksBase(models.Model):
     class Meta:
         abstract = True
 
@@ -117,7 +117,7 @@ class Tracks(models.Model):
     created_at = created_at
 
 
-class VotesToSkip(Tracks):
+class VotesToSkip(TracksBase):
     user = models.OneToOneField(
         'user.Users',
         on_delete=models.CASCADE,
@@ -125,17 +125,24 @@ class VotesToSkip(Tracks):
     )
 
 
-class SuccessTracks(Tracks):
-    pass
+class TracksState(TracksBase):
+    SUCCESS_TRACKS = ("SU", "Success Tracks")
+    SKIPPED_TRACKS = ("SK", "Skipped Tracks")
+    RECOMMENDED_TRACKS = ("RE", "Recommended Tracks")
+    QUEUE_TRACKS = ("QU", "Queue Tracks")
 
+    STATE_CHOICES = [
+        SUCCESS_TRACKS,
+        SKIPPED_TRACKS,
+        RECOMMENDED_TRACKS,
+        QUEUE_TRACKS
+    ]
 
-class SkippedTracks(Tracks):
-    pass
-
-
-class RecommendedTracks(Tracks):
-    pass
-
-
-class QueueTracks(Tracks):
-    pass
+    state = models.CharField(
+        max_length=2,
+        choices=STATE_CHOICES,
+        null=False,
+        blank=False,
+        unique=False,
+        help_text="State of the song in the room",
+    )

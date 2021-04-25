@@ -10,7 +10,7 @@ import codecs
 import random
 import json
 import string
-from typing import Type, List
+from typing import List
 
 
 def generate_unique_code(lenght: int = 6) -> str:
@@ -39,7 +39,7 @@ def generate_unique_code(lenght: int = 6) -> str:
     return code
 
 
-def save_track_in_db(Table: Type, room: object, track: dict) -> None:
+def save_track_in_state(state: str, room: object, track: dict) -> None:
     """Takes an spotify api track object and saves it
     to our database
 
@@ -48,6 +48,7 @@ def save_track_in_db(Table: Type, room: object, track: dict) -> None:
         room (object): room which the track belongs
         track (dict): spotify track api
     """
+    TracksState = apps.get_model("room", "TracksState")
 
     uri = track['uri']
     name = track['name']
@@ -62,7 +63,7 @@ def save_track_in_db(Table: Type, room: object, track: dict) -> None:
     ])
     external_url = track['external_urls']['spotify']
     try:
-        track = Table(
+        track = TracksState(
             room=room,
             track_id=track_id,
             uri=uri,
@@ -71,6 +72,7 @@ def save_track_in_db(Table: Type, room: object, track: dict) -> None:
             album_image_url=album_image_url or None,
             artists_str=artists_str or None,
             name=name or None,
+            state=state
         )
         track.save()
     except OperationalError:
@@ -80,7 +82,7 @@ def save_track_in_db(Table: Type, room: object, track: dict) -> None:
         album_name = codecs.encode(album_name, 'translit/long')
         artists_str = codecs.encode(artists_str, 'translit/long')
 
-        track = Table(
+        track = TracksState(
             room=room,
             track_id=track_id,
             uri=uri,
@@ -89,11 +91,12 @@ def save_track_in_db(Table: Type, room: object, track: dict) -> None:
             album_image_url=album_image_url or None,
             artists_str=artists_str or None,
             name=name or None,
+            state=state
         )
         track.save()
 
 
-def register_track(Table: object, room: object, data: dict) -> None:
+def register_track_in_state(state: str, room: object, data: dict) -> None:
     """Check if a track is valid to be added, A track
     is not valid if the last row is the same track
 
@@ -102,12 +105,14 @@ def register_track(Table: object, room: object, data: dict) -> None:
         room (object): [description]
         data (dict): [description]
     """
-    last_track = Table.objects.last()
+    TracksState = apps.get_model("room", "TracksState")
+
+    last_track = TracksState.objects.filter(state=state).last()
     if last_track:
         if last_track.track_id != data['item']['id']:
-            save_track_in_db(Table, room, data['item'])
+            save_track_in_state(state, room, data['item'])
     else:
-        save_track_in_db(Table, room, data['item'])
+        save_track_in_state(state, room, data['item'])
 
 
 def clean_playback(room: object, data: dict) -> object:

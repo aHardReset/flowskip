@@ -1,4 +1,4 @@
-from rest_framework import exceptions, status
+from rest_framework import exceptions
 
 
 def is_host_required(func_method):
@@ -25,6 +25,6 @@ def in_room_required(func_method):
 def is_authenticated_in_spotify(func_method):
     def is_authenticated(parent_class, request):
         if request.user.spotify_basic_data is None:
-            raise exceptions.ErrorDetail("needs spotify auth", code=status.HTTP_401_UNAUTHORIZED)
+            raise exceptions.AuthenticationFailed("needs spotify auth")
         return func_method(parent_class, request)
     return is_authenticated
