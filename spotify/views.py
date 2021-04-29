@@ -4,8 +4,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from flowskip.auths import UserAuthentication
 from user.models import Session, Users
+from rest_framework import exceptions
 from spotify.snippets import construct_state_value, deconstruct_state_value, update_data_changed
-from spotify.api import auth_manager, get_current_user, delete_cached_token
+from spotify.api import api_manager, auth_manager, get_current_user, delete_cached_token
 from spotify.models import SpotifyBasicData
 from spotify import serializers as spotify_serializers
 
@@ -19,8 +20,9 @@ class AuthenticateUser(APIView):
         response = {}
 
         spotify_serializers.RedirectSerializer(data=request.GET).is_valid(raise_exception=True)
-        force_authentication = request.GET.get("force_authentication")
-        if request.user.spotify_basic_data is not None and not force_authentication:
+        force_authentication = request.GET.get("force_authentication", "")
+        if (request.user.spotify_basic_data is not None
+                and not force_authentication.lower() in {'true', '1', 'yes'}):
             return Response(response, status=status.HTTP_208_ALREADY_REPORTED)
 
         state = construct_state_value(request.user.session.session_key, request.GET['redirect_url'])
@@ -29,28 +31,25 @@ class AuthenticateUser(APIView):
 
         return Response(response, status=status.HTTP_200_OK)
 
+    def patch(self, request, format=None):
+        if request.user.spotify_basic_data is None:
+            return exceptions.AuthenticationFailed()
+        sp = api_manager(request.user.spotify_basic_data)
+        data = sp.current_user()
+        _ = update_data_changed(request.user.spotify_basic_data, data)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class SpotifyOauthRedirect(APIView):
-    def get(self, request, format=None):
-        response = {}
-        code = request.GET.get('code')
-
-        # Get the info that passes from spotify state string
+    @staticmethod
+    def get_state(request):
         try:
-            state = request.GET['state']
-            params = deconstruct_state_value(state)
-            session_key = params['session_key'][0]
-            redirect_url = params['redirect_url'][0]
-        except KeyError as key:
-            print(f"not {key} provided in get")
-            return Response(response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return request.GET['state']
+        except KeyError:
+            exceptions.APIException()
 
-        # If error, redirect with ?error=not_auth
-        if request.GET.get('error') is not None:
-            return HttpResponseRedirect(redirect_url + f'?status={status.HTTP_401_UNAUTHORIZED}')
-        del(params)
-
-        # Get tokens from spotify
+    @staticmethod
+    def get_user_data(state, session_key, code):
         user_auth_manager = auth_manager(state, username=session_key)
         user_auth_manager.get_access_token(
             code=code,
@@ -63,62 +62,75 @@ class SpotifyOauthRedirect(APIView):
         data, new_tokens = get_current_user(tokens)
         if new_tokens:
             tokens = new_tokens
+        return data, tokens
+
+    @staticmethod
+    def get_image_url(data):
+        try:
+            image_url = data['images'][0].get("url")
+        except IndexError:
+            image_url = None
+        return image_url
+
+    def get(self, request, format=None):
+        code = request.GET.get('code')
+
+        # Get the info that passes from spotify state string
+        state = self.get_state(request)
+        params = deconstruct_state_value(state)
+
+        try:
+            session_key = params['session_key'][0]
+            redirect_url = params['redirect_url'][0]
+        except KeyError as key:
+            print(f"not {key} provided in get")
+            return Response({}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # If error, redirect with ?error=not_auth
+        if request.GET.get('error') is not None:
+            return HttpResponseRedirect(redirect_url + f'?status={status.HTTP_401_UNAUTHORIZED}')
+
+        data, tokens = self.get_user_data(state, session_key, code)
 
         # ? First implementation of spotipy error handler
         if 'error' in data.keys():
             return HttpResponseRedirect(
                 redirect_url
-                + f'?status={status.HTTP_503_SERVICE_UNAVAILABLE}')
-        del user_auth_manager
+                + f'?status={status.HTTP_503_SERVICE_UNAVAILABLE}'
+            )
 
         users = Users.objects.filter(pk=session_key)
 
         for each_user in Users.objects.values('session', 'spotify_basic_data'):
-            each_session = each_user['session']
+            each_session_key = each_user['session']
             each_spotify_basic_data = each_user['spotify_basic_data']
             if each_spotify_basic_data == data['id']:
-                if each_session != session_key:
+                if each_session_key != session_key:
                     _ = users.delete()
                     _ = Session.objects.filter(pk=session_key).delete()
                 delete_cached_token(session_key)
-                return HttpResponseRedirect(
-                    redirect_url
-                    + f'?status={status.HTTP_208_ALREADY_REPORTED}&session_key={each_session}'
-                )
-
-        user = users[0]
+                user = Users.objects.get(pk=each_session_key)
+                break
+        else:
+            user = users[0]
 
         # Do a new SpotifyBasicData object
-        try:
-            spotify_basic_data = SpotifyBasicData.objects.get(pk=data['id'])
-            spotify_basic_data.access_token = tokens['access_token']
-            spotify_basic_data.refresh_token = tokens['refresh_token']
-            spotify_basic_data.access_token_expires_at = tokens['expires_at']
-            spotify_basic_data.save(update_fields=[
-                'access_token',
-                'refresh_token',
-                'access_token_expires_at'
-            ])
-            spotify_basic_data = update_data_changed(spotify_basic_data, data)
-            user.spotify_basic_data = spotify_basic_data
-        except SpotifyBasicData.DoesNotExist:
-            try:
-                image_url = data['images'][0].get("url")
-            except IndexError:
-                image_url = None
-            spotify_basic_data = SpotifyBasicData(
-                id=data['id'],
-                uri=data['uri'],
-                display_name=data.get('display_name'),
-                image_url=image_url,
-                external_url=data['external_urls'].get("spotify"),
-                product=data['product'],
-                access_token=tokens['access_token'],
-                refresh_token=tokens['refresh_token'],
-                access_token_expires_at=tokens['expires_at']
-            )
-            user.spotify_basic_data = spotify_basic_data
-            spotify_basic_data.save()
+        spotify_basic_data = SpotifyBasicData.objects.filter(pk=data['id'])
+        if spotify_basic_data.exists():
+            _ = spotify_basic_data.delete()
+        spotify_basic_data = SpotifyBasicData(
+            id=data['id'],
+            uri=data['uri'],
+            display_name=data.get('display_name'),
+            image_url=self.get_image_url(data),
+            external_url=data['external_urls'].get("spotify"),
+            product=data['product'],
+            access_token=tokens['access_token'],
+            refresh_token=tokens['refresh_token'],
+            access_token_expires_at=tokens['expires_at']
+        )
+        user.spotify_basic_data = spotify_basic_data
+        spotify_basic_data.save()
         user.save(update_fields=['spotify_basic_data'])
 
         delete_cached_token(session_key)

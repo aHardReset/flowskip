@@ -3,6 +3,14 @@ import pytz
 tzinfo=pytz.UTC
 a = datetime.utcnow()
 print(a)
+
+a = [11]
+for i in range(1, 10):
+    if i in a:
+        print("Found")
+        break
+else:
+    print("Not found")
 """
 print(string)
 now = datetime.now()

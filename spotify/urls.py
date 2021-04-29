@@ -7,6 +7,11 @@ urlpatterns = [
         name='authenticate-user',
     ),
     path(
+        'update',
+        view=views.AuthenticateUser.as_view(),
+        name='update',
+    ),
+    path(
         'spotify-oauth-redirect',
         view=views.SpotifyOauthRedirect.as_view(),
         name='spotify-oauth-redirect',
