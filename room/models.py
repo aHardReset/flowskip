@@ -117,25 +117,56 @@ class TracksBase(models.Model):
     created_at = created_at
 
 
-class VotesToSkip(TracksBase):
+class Votes(models.Model):
+
+    SKIP = ("SK", "Skip")
+    LIKE = ("LI", "Like")
+
+    VOTES_CHOICE = [
+        SKIP,
+        LIKE,
+    ]
+
+    room = models.ForeignKey(
+        'room.Rooms',
+        on_delete=models.CASCADE,
+        null=False,
+        help_text="Room",
+        unique=False
+    )
     user = models.OneToOneField(
         'user.Users',
         on_delete=models.CASCADE,
-        help_text="who voted to skip the track",
+        help_text="who made the vote the track",
+    )
+    track_id = models.CharField(
+        max_length=64,
+        null=False,
+        blank=False,
+        default="",
+        help_text="spotify track_id",
+    )
+    action = models.CharField(
+        max_length=2,
+        choices=VOTES_CHOICE,
+        null=False,
+        blank=False,
+        unique=False,
+        help_text="User vote kind for the track",
     )
 
 
 class TracksState(TracksBase):
-    SUCCESS_TRACKS = ("SU", "Success Tracks")
-    SKIPPED_TRACKS = ("SK", "Skipped Tracks")
-    RECOMMENDED_TRACKS = ("RE", "Recommended Tracks")
-    QUEUE_TRACKS = ("QU", "Queue Tracks")
+    SUCCEEDED = ("SU", "Success Tracks")
+    SKIPPED = ("SK", "Skipped Tracks")
+    RECOMMENDED = ("RE", "Recommended Tracks")
+    QUEUED = ("QU", "Queue Tracks")
 
     STATE_CHOICES = [
-        SUCCESS_TRACKS,
-        SKIPPED_TRACKS,
-        RECOMMENDED_TRACKS,
-        QUEUE_TRACKS
+        SUCCEEDED,
+        SKIPPED,
+        RECOMMENDED,
+        QUEUED
     ]
 
     state = models.CharField(

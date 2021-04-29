@@ -11,7 +11,7 @@ from rest_framework.response import Response
 # Models
 from room import serializers as room_serializers
 from room.serializers import TracksStateSerializer
-from room.models import Rooms, VotesToSkip, TracksState
+from room.models import Rooms, TracksState, Votes
 from user import models as user_models
 from flowskip.auths import UserAuthentication
 
@@ -176,12 +176,11 @@ class ParticipantManager(APIView):
 class StateManager(APIView):
     authentication_classes = [UserAuthentication]
 
+    @in_room_required
     def post(self, request, format=None):
         response = {}
 
         room_serializers.CodeSerializer(data=request.data).is_valid(raise_exception=True)
-        if not request.user.room:
-            raise exceptions.NotFound("user doesn't have a room")
         if not request.user.room.code == request.data['code']:
             return Response(response, status=status.HTTP_426_UPGRADE_REQUIRED)
 
@@ -195,41 +194,42 @@ class StateManager(APIView):
         response = {}
 
         room_serializers.TrackIdSerializer(data=request.data).is_valid(raise_exception=True)
-        try:
-            room = Rooms.objects.get(code=request.data['code'])
-        except ObjectDoesNotExist:
-            return Response(response, status=status.HTTP_200_OK)
 
-        if room.track_id is None:
+        if request.user.room.track_id is None:
             return response, status.HTTP_410_GONE
 
-        current_playing_track = room.current_playing_track
+        current_playing_track = request.user.room.current_playing_track
         progress_ms = current_playing_track['progress_ms']
         duration_ms = current_playing_track['item']['duration_ms']
         if (progress_ms / duration_ms) * 100 > TOO_LATE:
             response['msg'] = "too late to vote"
             return response, status.HTTP_410_GONE
 
-        room_votes = VotesToSkip.objects.filter(room=room)
-        room_votes.exclude(track_id=room.track_id).delete()
-        if room.track_id != request.data['track_id']:
+        room_votes = Votes.objects.filter(room=request.user.room).filter(action="SK")
+        _ = room_votes.exclude(track_id=request.user.room.track_id).delete()
+        if request.user.room.track_id != request.data['track_id']:
             return response, status.HTTP_301_MOVED_PERMANENTLY
 
-        track_votes = VotesToSkip.objects.filter(track_id=request.data['track_id'])
+        track_votes = room_votes.filter(track_id=request.data['track_id'])
         votes = track_votes.count()
         for user in track_votes.values('user'):
             if request.user.session.session_key == user['user']:
                 return response, status.HTTP_208_ALREADY_REPORTED
-        vote = VotesToSkip(room=room, user=request.user, track_id=room.track_id)
+        vote = Votes(
+            room=request.user.room,
+            user=request.user,
+            action="SK",
+            track_id=request.data['track_id']
+        )
         vote.save()
         votes += 1
 
-        if votes >= room.votes_to_skip:
+        if votes >= request.user.room.votes_to_skip:
             response['msg'] = "skipping song"
             # El verdugo -> has hecho el voto de gracia
-            sp_api = spotify_api.api_manager(room.host.spotify_basic_data)
+            sp_api = spotify_api.api_manager(request.user.room.host.spotify_basic_data)
             sp_api.next_track()
-            room_snippets.register_track_in_state("SK", room, current_playing_track)
+            room_snippets.register_track_in_state("SK", request.user.room, current_playing_track)
         return response, status.HTTP_201_CREATED
 
     def get(self, request, format=None):
@@ -326,9 +326,11 @@ class StateManager(APIView):
 
         votes_in_req = request.data.get('votes')
         if type(votes_in_req) is list:
-            votes_in_db = VotesToSkip.objects.filter(
+            votes_in_db = Votes.objects.filter(
                 room=room
-            ).filter(track_id=room.track_id)
+            ).filter(track_id=room.track_id).filter(
+                action="SK"
+            )
 
             votes_in_db = [vote.user for vote in votes_in_db]
             votes_in_db = room_snippets.construct_participants(votes_in_db)

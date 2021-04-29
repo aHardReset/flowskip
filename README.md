@@ -26,9 +26,10 @@ You agree that flowskip will be able to:
 - View your activity on Spotify
 
     The content you are playing and Spotify Connect devices information
--Take actions in Spotify on your behalf
+- Take actions in Spotify on your behalf
 
     Control Spotify on your devices
+
 You can remove this access at any time at spotify.com/account.
 
 For more information about how flowskip can use your personal data, please see flowskip's privacy policy.
