@@ -357,7 +357,6 @@ class StateManager(APIView):
 
     @in_room_required
     def put(self, request, format=None):
-        response = {}
         room_serializers.AddToQueueSerializer(data=request.data).is_valid(raise_exception=True)
         recommended_tracks = TracksState.objects.filter(
             room=request.user.room
@@ -418,4 +417,4 @@ class StateManager(APIView):
                 state="QU",
             )
             track.save()
-        return Response(response, status=status.HTTP_201_CREATED)
+        return Response(status=status.HTTP_201_CREATED)

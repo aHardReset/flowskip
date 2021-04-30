@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.utils import timezone
-from os import environ
+import os
 from os import remove
 import random
 import string
@@ -10,9 +10,9 @@ from spotify import snippets as spotify_snippets
 
 import spotipy
 
-CLIENT_ID = environ["SPOTIFY_FLOWSKIP_CLIENT_ID"]
-CLIENT_SECRET = environ["SPOTIFY_FLOWSKIP_CLIENT_SECRET"]
-REDIRECT_URI = "http://127.0.0.1:8000/spotify/spotify-oauth-redirect"
+CLIENT_ID = os.getenv("SPOTIFY_FLOWSKIP_CLIENT_ID")
+CLIENT_SECRET = os.getenv("SPOTIFY_FLOWSKIP_CLIENT_SECRET")
+REDIRECT_URI = os.getenv("REDIRECT_URI")
 scopes = [
     'user-modify-playback-state',
     'user-read-playback-state',

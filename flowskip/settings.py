@@ -11,20 +11,21 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 """
 
 from pathlib import Path
-from os import environ
+from dotenv import load_dotenv
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
+load_dotenv(dotenv_path=BASE_DIR / '.env')
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = environ['FLOWSKIP_SECRET_KEY']
+SECRET_KEY = os.getenv("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = bool(int(os.getenv("DEBUG")))
 
 ALLOWED_HOSTS = []
 
@@ -41,6 +42,7 @@ INSTALLED_APPS = [
 
     # 3rd party modules
     'rest_framework',
+    'corsheaders',
 
     # My apps
     'user',
@@ -51,6 +53,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -84,20 +87,16 @@ WSGI_APPLICATION = 'flowskip.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'flowskip',
-        'USER': 'root',
-        'PASSWORD': 'nano123',
-        'HOST': '127.0.0.1',
-        'PORT': '3306',
+        'ENGINE': os.getenv("DB_DEFAULT_ENGINE"),
+        'NAME': os.getenv("DB_DEFAULT_NAME"),
+        'USER': os.getenv("DB_DEFAULT_USER"),
+        'PASSWORD': os.getenv("DB_DEFAULT_PASSWORD"),
+        'HOST': os.getenv("DB_DEFAULT_HOST"),
+        'PORT': os.getenv("DB_DEFAULT_PORT"),
         'OPTIONS': {
             'charset': 'utf8mb4',
             'use_unicode': True,
         }
-    },
-    'sqlite3': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
@@ -139,3 +138,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/3.1/howto/static-files/
 
 STATIC_URL = '/static/'
+
+# Cors
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"http://localhost:*",
+    r"http://127.0.0.1:*",
+]

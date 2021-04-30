@@ -129,7 +129,6 @@ def clean_playback(room: object, data: dict) -> object:
 
     if data:
         del data['timestamp']
-        del data['context']
         del data['actions']
         del data['item']['available_markets']
         del data['item']['album']['available_markets']

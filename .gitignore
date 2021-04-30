@@ -6,6 +6,7 @@
 
 # Debug files
 .cache**
+tests.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -111,7 +112,8 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
+**.env
+!example.env
 .venv
 env/
 venv/
