@@ -10,8 +10,8 @@ from spotify import snippets as spotify_snippets
 
 import spotipy
 
-CLIENT_ID = os.getenv("SPOTIFY_FLOWSKIP_CLIENT_ID")
-CLIENT_SECRET = os.getenv("SPOTIFY_FLOWSKIP_CLIENT_SECRET")
+CLIENT_ID = os.getenv("CLIENT_ID")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 REDIRECT_URI = os.getenv("REDIRECT_URI")
 scopes = [
     'user-modify-playback-state',

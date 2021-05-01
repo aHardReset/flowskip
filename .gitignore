@@ -1,9 +1,6 @@
 # Text editor environment configurations
 .vscode/**
 
-# Django specific-environment files
-**/migrations/0**
-
 # Debug files
 .cache**
 tests.py

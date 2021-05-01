@@ -9,11 +9,11 @@ https://docs.djangoproject.com/en/3.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/3.1/ref/settings/
 """
-
+import django_heroku
 from pathlib import Path
 from dotenv import load_dotenv
 import os
-
+import dj_database_url
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -27,7 +27,7 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = bool(int(os.getenv("DEBUG")))
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [] if DEBUG else ['*']
 
 
 # Application definition
@@ -85,21 +85,27 @@ WSGI_APPLICATION = 'flowskip.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/3.1/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': os.getenv("DB_DEFAULT_ENGINE"),
-        'NAME': os.getenv("DB_DEFAULT_NAME"),
-        'USER': os.getenv("DB_DEFAULT_USER"),
-        'PASSWORD': os.getenv("DB_DEFAULT_PASSWORD"),
-        'HOST': os.getenv("DB_DEFAULT_HOST"),
-        'PORT': os.getenv("DB_DEFAULT_PORT"),
-        'OPTIONS': {
-            'charset': 'utf8mb4',
-            'use_unicode': True,
+if DEBUG:
+    DATABASES = {
+        'default': {
+            'ENGINE': os.getenv("DB_DEFAULT_ENGINE"),
+            'NAME': os.getenv("DB_DEFAULT_NAME"),
+            'USER': os.getenv("DB_DEFAULT_USER"),
+            'PASSWORD': os.getenv("DB_DEFAULT_PASSWORD"),
+            'HOST': os.getenv("DB_DEFAULT_HOST"),
+            'PORT': os.getenv("DB_DEFAULT_PORT"),
+            'OPTIONS': {
+                'charset': 'utf8mb4',
+                'use_unicode': True,
+            }
         }
     }
-}
-
+else:
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=os.getenv("DATABASE_URL")
+        )
+    }
 
 # Password validation
 # https://docs.djangoproject.com/en/3.1/ref/settings/#auth-password-validators
@@ -144,3 +150,6 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"http://localhost:*",
     r"http://127.0.0.1:*",
 ]
+
+# Activate Django-Heroku.
+django_heroku.settings(locals())

@@ -24,27 +24,25 @@ class UserManager(APIView):
     authentication_classes = [SessionAuthentication]
 
     def post(self, request, format=None):
-        response = {}
 
         session = user_models.Session.objects.get(pk=request.headers['session_key'])
         users = user_models.Users.objects.filter(pk=session)
         if users.exists():
-            return Response(response, status=status.HTTP_208_ALREADY_REPORTED)
+            return Response({}, status=status.HTTP_208_ALREADY_REPORTED)
         user = user_models.Users(pk=session)
         user.save()
-        return Response(response, status=status.HTTP_201_CREATED)
+        return Response({}, status=status.HTTP_201_CREATED)
 
     def delete(self, request, format=None):
-        response = {}
 
         session = user_models.Session.objects.get(pk=request.headers['session_key'])
 
         users = user_models.Users.objects.filter(pk=session)
         if not users.exists():
-            return Response(response, status=status.HTTP_404_NOT_FOUND)
+            return Response({}, status=status.HTTP_404_NOT_FOUND)
         user = users[0]
         _ = user.delete()
-        return Response(response, status=status.HTTP_204_NO_CONTENT)
+        return Response({}, status=status.HTTP_204_NO_CONTENT)
 
     def get(self, request, format=None):
         """Read information about an user
@@ -68,12 +66,13 @@ class UserManager(APIView):
             response['is_paid_user'] = user_models.PaidUsers.objects.filter(
                 pk=request.user.spotify_basic_data.id
             ).exists()
-            response['is_commerce'] = user_models.Commerces.objects.filter(
+            response['is_advanced_paid_user'] = user_models.Commerces.objects.filter(
                 pk=request.user.spotify_basic_data.id
             ).exists()
-            response['user'] = self.get_status(request.user)
-        response['has_spotify_login_info'] = request.user.spotify_basic_data is not None
+            response['spotify_user'] = self.get_status(request.user)
+        response['is_spotify_authenticated'] = request.user.spotify_basic_data is not None
         response['has_room'] = request.user.room is not None
+        response['expire_date'] = request.user.session.expire_date
         return Response(response, status=status.HTTP_200_OK)
 
     def get_status(self, user: object) -> dict:
@@ -114,10 +113,9 @@ class SessionManager(APIView):
         return Response(response, status=status.HTTP_200_OK)
 
     def delete(self, request, format=None):
-        response = {}
         session = self.get_session(request)
         _ = session.delete()
-        return Response(response, status=status.HTTP_204_NO_CONTENT)
+        return Response({}, status=status.HTTP_204_NO_CONTENT)
 
     @staticmethod
     def get_session(request) -> user_models.Session:

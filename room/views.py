@@ -155,18 +155,17 @@ class ParticipantManager(APIView):
         return Response(response, status=status.HTTP_501_NOT_IMPLEMENTED)
 
     def delete(self, request, format=None):
-        response = {}
 
         if request.user.room is None:
-            return Response(response, status=status.HTTP_404_NOT_FOUND)
+            return Response({}, status=status.HTTP_404_NOT_FOUND)
 
         if request.user.room.host.session.session_key == request.user.session.session_key:
             _ = Rooms.objects.filter(host=request.user).delete()
-            return Response(response, status=status.HTTP_204_NO_CONTENT)
+            return Response({}, status=status.HTTP_204_NO_CONTENT)
 
         request.user.room = None
         request.user.save(update_fields=['room'])
-        return Response(response, status=status.HTTP_204_NO_CONTENT)
+        return Response({}, status=status.HTTP_204_NO_CONTENT)
 
     @staticmethod
     def geo_filter(request):
@@ -191,30 +190,28 @@ class StateManager(APIView):
 
     @staticmethod
     def _post_vote_to_skip(request):
-        response = {}
 
         room_serializers.TrackIdSerializer(data=request.data).is_valid(raise_exception=True)
 
         if request.user.room.track_id is None:
-            return response, status.HTTP_410_GONE
+            return None, status.HTTP_410_GONE
 
         current_playing_track = request.user.room.current_playing_track
         progress_ms = current_playing_track['progress_ms']
         duration_ms = current_playing_track['item']['duration_ms']
         if (progress_ms / duration_ms) * 100 > TOO_LATE:
-            response['msg'] = "too late to vote"
-            return response, status.HTTP_410_GONE
+            return None, status.HTTP_410_GONE
 
         room_votes = Votes.objects.filter(room=request.user.room).filter(action="SK")
         _ = room_votes.exclude(track_id=request.user.room.track_id).delete()
         if request.user.room.track_id != request.data['track_id']:
-            return response, status.HTTP_301_MOVED_PERMANENTLY
+            return None, status.HTTP_301_MOVED_PERMANENTLY
 
         track_votes = room_votes.filter(track_id=request.data['track_id'])
         votes = track_votes.count()
         for user in track_votes.values('user'):
             if request.user.session.session_key == user['user']:
-                return response, status.HTTP_208_ALREADY_REPORTED
+                return None, status.HTTP_208_ALREADY_REPORTED
         vote = Votes(
             room=request.user.room,
             user=request.user,
@@ -225,12 +222,11 @@ class StateManager(APIView):
         votes += 1
 
         if votes >= request.user.room.votes_to_skip:
-            response['msg'] = "skipping song"
             # El verdugo -> has hecho el voto de gracia
             sp_api = spotify_api.api_manager(request.user.room.host.spotify_basic_data)
             sp_api.next_track()
             room_snippets.register_track_in_state("SK", request.user.room, current_playing_track)
-        return response, status.HTTP_201_CREATED
+        return None, status.HTTP_201_CREATED
 
     def get(self, request, format=None):
         response = {}
@@ -417,4 +413,4 @@ class StateManager(APIView):
                 state="QU",
             )
             track.save()
-        return Response(status=status.HTTP_201_CREATED)
+        return Response({}, status=status.HTTP_201_CREATED)
