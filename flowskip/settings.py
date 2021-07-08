@@ -150,6 +150,11 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"http://localhost:*",
     r"http://127.0.0.1:*",
 ]
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [
+    'Authorization',
+    'Content-Type',
+]
 
 # Activate Django-Heroku.
 django_heroku.settings(locals())

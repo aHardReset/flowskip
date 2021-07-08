@@ -17,7 +17,7 @@ class UserAuthentication(authentication.BaseAuthentication):
 
     def authenticate(self, request):
         try:
-            session_key = request.headers['session_key']
+            session_key = str(request.headers['Authorization']).removeprefix('Bearer ')
             # session = Session.objects.get(pk=session_key)
             # user = Users.objects.get(pk=session)
             user = user_models.Users.objects.get(pk=session_key)
@@ -42,7 +42,7 @@ class SessionAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
         Session = user_models.Session
         try:
-            session_key = request.headers['session_key']
+            session_key = str(request.headers['Authorization']).removeprefix('Bearer ')
             _ = Session.objects.get(pk=session_key)
         except KeyError:
             raise exceptions.NotAuthenticated("you need a session key")

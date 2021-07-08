@@ -25,7 +25,7 @@ class UserManager(APIView):
 
     def post(self, request, format=None):
 
-        session = user_models.Session.objects.get(pk=request.headers['session_key'])
+        session = user_models.Session.objects.get(pk=request.headers['Authorization'].removeprefix('Bearer '))
         users = user_models.Users.objects.filter(pk=session)
         if users.exists():
             return Response({}, status=status.HTTP_208_ALREADY_REPORTED)
@@ -35,7 +35,7 @@ class UserManager(APIView):
 
     def delete(self, request, format=None):
 
-        session = user_models.Session.objects.get(pk=request.headers['session_key'])
+        session = user_models.Session.objects.get(pk=request.headers['Authorization'].removeprefix('Bearer '))
 
         users = user_models.Users.objects.filter(pk=session)
         if not users.exists():
@@ -56,7 +56,7 @@ class UserManager(APIView):
         """
 
         response = {}
-        session = user_models.Session.objects.get(pk=request.headers['session_key'])
+        session = user_models.Session.objects.get(pk=request.headers['Authorization'].removeprefix('Bearer '))
         users = user_models.Users.objects.filter(pk=session)
         if not users.exists():
             return Response(response, status=status.HTTP_404_NOT_FOUND)
@@ -119,10 +119,11 @@ class SessionManager(APIView):
 
     @staticmethod
     def get_session(request) -> user_models.Session:
-        session_key = request.headers.get("session_key", False)
+        session_key = request.headers.get('Authorization', False)
         if not session_key:
             raise exceptions.AuthenticationFailed()
 
+        session_key = session_key.removeprefix('Bearer ')
         sessions = user_models.Session.objects.filter(pk=session_key)
         if not sessions.exists():
             raise exceptions.NotFound()
