@@ -78,7 +78,7 @@ class RoomManager(APIView):
         request.user.room = room
         request.user.save(update_fields=['room'])
         response['code'] = room.code
-        return response, status.HTTP_200_OK
+        return response, status.HTTP_201_CREATED
 
     def create_commerce(self, request):
         response = {}
@@ -285,14 +285,14 @@ class StateManager(APIView):
             return Response(response, status=status.HTTP_404_NOT_FOUND)
 
         if (timezone.now() - room.modified_at).total_seconds() > 2:
-            sp_api_tunel = spotify_api.api_manager(room.host.spotify_basic_data)
-            data = sp_api_tunel.current_playback()
+            sp_api_tunnel = spotify_api.api_manager(room.host.spotify_basic_data)
+            data = sp_api_tunnel.current_playback()
             room = room_snippets.clean_playback(room, data)
         response['current_playback'] = room.current_playing_track
 
         if response['current_playback'] != {}:
             progress_ms = response['current_playback']['progress_ms']
-            durarion_ms = response['current_playback']['item']['duration_ms']
+            duration_ms = response['current_playback']['item']['duration_ms']
             same_track = response['current_playback']['item']['id'] == request.data['track_id']
             if not same_track:
                 track_in_queue = TracksState.objects.filter(
@@ -304,7 +304,7 @@ class StateManager(APIView):
                 )
                 if track_in_queue.exists():
                     track_in_queue[0].delete()
-            if (progress_ms / durarion_ms) * 100 > TOO_LATE and same_track:
+            if (progress_ms / duration_ms) * 100 > TOO_LATE and same_track:
                 room_snippets.register_track_in_state(
                     'SU',
                     room,
