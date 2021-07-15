@@ -149,7 +149,7 @@ STATIC_URL = '/static/'
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"http://localhost:*",
     r"http://127.0.0.1:*",
-    r"https://flowskip.github.io/*",
+    r"https://flowskip.com*",
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [

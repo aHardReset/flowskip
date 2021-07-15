@@ -276,7 +276,7 @@ class StateManager(APIView):
 
     def patch(self, request, format=None):
         response = {}
-        room_serializers.StateManagerSerializer(
+        room_serializers.CodeSerializer(
             data=request.data
         ).is_valid(raise_exception=True)
         try:
@@ -330,7 +330,7 @@ class StateManager(APIView):
 
             votes_in_db = [vote.user for vote in votes_in_db]
             votes_in_db = room_snippets.construct_participants(votes_in_db)
-            response['votes_to_skip'] = room_snippets.calculate_dict_deltas(
+            response['votes'] = room_snippets.calculate_dict_deltas(
                 votes_in_db,
                 votes_in_req,
                 gone=False
@@ -343,7 +343,7 @@ class StateManager(APIView):
                 dict(TracksStateSerializer(i).data)
                 for i in queue_in_db
             ]
-            response['queue_tracks'] = room_snippets.calculate_dict_deltas(
+            response['queue'] = room_snippets.calculate_dict_deltas(
                 queue_in_db,
                 queue_in_req,
                 gone=False,
