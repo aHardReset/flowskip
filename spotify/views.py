@@ -51,7 +51,7 @@ class SpotifyOauthRedirect(APIView):
             return request.GET['state']
         except KeyError:
             raise exceptions.APIException(
-                "Spotify doesn't provide the state. Report this inmmediatly",
+                "Spotify doesn't provide the state. Report this immediately",
                 status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -64,7 +64,7 @@ class SpotifyOauthRedirect(APIView):
             check_cache=False
         )
 
-        # Use the tokens to get the user'info
+        # Use the tokens to get the user info
         tokens = user_auth_manager.get_cached_token()
         data, new_tokens = get_current_user(tokens)
         if new_tokens:

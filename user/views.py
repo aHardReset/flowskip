@@ -1,4 +1,4 @@
-"""Views for manage User and dependences"""
+"""Views for manage User and dependencies """
 
 # Django
 
@@ -11,7 +11,7 @@ from rest_framework import exceptions
 # Models
 from user import models as user_models
 
-# Serializars
+# Serializers
 from user.serializers import SessionSerializer
 
 # Utilities
@@ -25,7 +25,9 @@ class UserManager(APIView):
 
     def post(self, request, format=None):
 
-        session = user_models.Session.objects.get(pk=request.headers['Authorization'].removeprefix('Bearer '))
+        session = user_models.Session.objects.get(
+            pk=request.headers['Authorization'].removeprefix('Bearer ')
+        )
         users = user_models.Users.objects.filter(pk=session)
         if users.exists():
             return Response({}, status=status.HTTP_208_ALREADY_REPORTED)
@@ -35,7 +37,9 @@ class UserManager(APIView):
 
     def delete(self, request, format=None):
 
-        session = user_models.Session.objects.get(pk=request.headers['Authorization'].removeprefix('Bearer '))
+        session = user_models.Session.objects.get(
+            pk=request.headers['Authorization'].removeprefix('Bearer ')
+        )
 
         users = user_models.Users.objects.filter(pk=session)
         if not users.exists():
@@ -56,7 +60,9 @@ class UserManager(APIView):
         """
 
         response = {}
-        session = user_models.Session.objects.get(pk=request.headers['Authorization'].removeprefix('Bearer '))
+        session = user_models.Session.objects.get(
+            pk=request.headers['Authorization'].removeprefix('Bearer ')
+        )
         users = user_models.Users.objects.filter(pk=session)
         if not users.exists():
             return Response(response, status=status.HTTP_404_NOT_FOUND)
@@ -101,6 +107,7 @@ class SessionManager(APIView):
         response = {}
 
         if request.session.session_key:
+            response['session_key'] = request.session.session_key
             return Response(response, status=status.HTTP_208_ALREADY_REPORTED)
         request.session.create()
         session_key = request.session.session_key
