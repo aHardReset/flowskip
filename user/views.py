@@ -46,7 +46,7 @@ class UserManager(APIView):
             return Response({}, status=status.HTTP_404_NOT_FOUND)
         user = users[0]
         _ = user.delete()
-        return Response({}, status=status.HTTP_204_NO_CONTENT)
+        return Response({}, status=status.HTTP_200_OK)
 
     def get(self, request, format=None):
         """Read information about an user
@@ -123,7 +123,7 @@ class SessionManager(APIView):
     def delete(self, request, format=None):
         session = self.get_session(request)
         _ = session.delete()
-        return Response({}, status=status.HTTP_204_NO_CONTENT)
+        return Response({}, status=status.HTTP_200_OK)
 
     @staticmethod
     def get_session(request) -> user_models.Session:

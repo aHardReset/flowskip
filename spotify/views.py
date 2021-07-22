@@ -34,10 +34,13 @@ class AuthenticateUser(APIView):
     def patch(self, request, format=None):
         if request.user.spotify_basic_data is None:
             raise exceptions.AuthenticationFailed()
-        sp = api_manager(request.user.spotify_basic_data)
+        old_spotify_basic_data = request.user.spotify_basic_data
+        sp = api_manager(old_spotify_basic_data)
         data = sp.current_user()
-        _ = update_data_changed(request.user.spotify_basic_data, data)
-        return Response({}, status=status.HTTP_204_NO_CONTENT)
+        new_spotify_basic_data = update_data_changed(request.user.spotify_basic_data, data)
+        if(vars(old_spotify_basic_data) == vars(new_spotify_basic_data)):
+            return Response(None, status=status.HTTP_204_NO_CONTENT)
+        return Response(data, status=status.HTTP_205_RESET_CONTENT)
 
 
 class SpotifyOauthRedirect(APIView):

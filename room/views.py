@@ -161,11 +161,11 @@ class ParticipantManager(APIView):
 
         if request.user.room.host.session.session_key == request.user.session.session_key:
             _ = Rooms.objects.filter(host=request.user).delete()
-            return Response({}, status=status.HTTP_204_NO_CONTENT)
+            return Response({}, status=status.HTTP_200_OK)
 
         request.user.room = None
         request.user.save(update_fields=['room'])
-        return Response({}, status=status.HTTP_204_NO_CONTENT)
+        return Response({}, status=status.HTTP_200_OK)
 
     @staticmethod
     def geo_filter(request):
