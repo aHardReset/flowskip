@@ -105,10 +105,11 @@ class SessionManager(APIView):
         """Creates a new session_key and returns it"""
 
         response = {}
-
+        """
         if request.session.session_key:
             response['session_key'] = request.session.session_key
             return Response(response, status=status.HTTP_208_ALREADY_REPORTED)
+        """
         request.session.create()
         session_key = request.session.session_key
         response['session_key'] = session_key
