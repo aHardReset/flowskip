@@ -1,8 +1,10 @@
+from typing import Tuple
 from django.http import HttpResponseRedirect
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from flowskip.auths import UserAuthentication
+from spotify.decorators import is_authenticated_in_spotify_required
 from user.models import Session, Users
 from rest_framework import exceptions
 from spotify.snippets import construct_state_value, deconstruct_state_value, update_data_changed
@@ -31,9 +33,8 @@ class AuthenticateUser(APIView):
 
         return Response(response, status=status.HTTP_200_OK)
 
+    @is_authenticated_in_spotify_required
     def patch(self, request, format=None):
-        if request.user.spotify_basic_data is None:
-            raise exceptions.AuthenticationFailed()
         old_spotify_basic_data = request.user.spotify_basic_data
         sp = api_manager(old_spotify_basic_data)
         data = sp.current_user()
@@ -83,7 +84,7 @@ class SpotifyOauthRedirect(APIView):
         return image_url
 
     @staticmethod
-    def get_user_to_add_spotify_basic_data(data, session_key):
+    def get_user_to_add_spotify_basic_data(data, session_key) -> Tuple[Users, int]:
         users = Users.objects.filter(pk=session_key)
         if not users.exists():
             raise exceptions.NotFound(f"{session_key} as user")
@@ -97,11 +98,13 @@ class SpotifyOauthRedirect(APIView):
                     _ = Session.objects.filter(pk=session_key).delete()
                 delete_cached_token(session_key)
                 user = Users.objects.get(pk=each_session_key)
+                response_code = status.HTTP_208_ALREADY_REPORTED
                 break
         else:
             user = users[0]
+            response_code = status.HTTP_200_OK
 
-        return user
+        return user, response_code
 
     def get(self, request, format=None):
         code = request.GET.get('code')
@@ -130,7 +133,7 @@ class SpotifyOauthRedirect(APIView):
                 + f'?status={status.HTTP_503_SERVICE_UNAVAILABLE}'
             )
 
-        user = self.get_user_to_add_spotify_basic_data(data, session_key)
+        user, response_code = self.get_user_to_add_spotify_basic_data(data, session_key)
 
         # Do a new SpotifyBasicData object
         if user.spotify_basic_data is not None:
@@ -156,7 +159,7 @@ class SpotifyOauthRedirect(APIView):
 
         delete_cached_token(session_key)
         params = "&".join([
-            f'status={status.HTTP_200_OK}',
+            f'status={response_code}',
             f'session_key={user.session.session_key}'
         ])
         return HttpResponseRedirect(redirect_url + '?' + params)

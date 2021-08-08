@@ -18,7 +18,8 @@ from flowskip.auths import UserAuthentication
 # Utilities
 from room import snippets as room_snippets
 from spotify import api as spotify_api
-from room.decorators import is_host_required, in_room_required, is_authenticated_in_spotify_required
+from room.decorators import is_host_required, in_room_required
+from spotify.decorators import is_authenticated_in_spotify_required
 
 TOO_LATE = 50
 
