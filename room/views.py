@@ -18,7 +18,7 @@ from flowskip.auths import UserAuthentication
 # Utilities
 from room import snippets as room_snippets
 from spotify import api as spotify_api
-from room.decorators import is_host_required, in_room_required, is_authenticated_in_spotify
+from room.decorators import is_host_required, in_room_required, is_authenticated_in_spotify_required
 
 TOO_LATE = 50
 
@@ -30,16 +30,13 @@ class RoomManager(APIView):
     def get(self, request, format=None):
         response = {}
 
-        room_serializers.CodeSerializer(data=request.GET).is_valid(raise_exception=True)
-
-        # Checks if the user code is the same as the request
         response = room_serializers.RoomInfoSerializer(request.user.room).data
         host_seesion_key = request.user.room.host.session.session_key
         user_session_key = request.user.session.session_key
         response['user_is_host'] = host_seesion_key == user_session_key
         return Response(response, status=status.HTTP_200_OK)
 
-    @is_authenticated_in_spotify
+    @is_authenticated_in_spotify_required
     def post(self, request, format=None) -> Response:
         response = {}
 
