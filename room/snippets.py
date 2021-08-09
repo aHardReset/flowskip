@@ -159,17 +159,41 @@ def construct_participant(user: object) -> dict:
     Returns:
         dict: [description]
     """
-    Parent = apps.get_model("spotify", "SpotifyBasicData")
-    if not isinstance(user.spotify_basic_data, Parent):
-        raise ValueError("I need spotify basic data")
-    return {
+    participant = {
         'is_authenticated': True if user.spotify_basic_data else False,
-        'id': user.spotify_basic_data.id or user.session.session_key[-6:],
-        'display_name': user.spotify_basic_data.display_name or None,
-        'image_url': user.spotify_basic_data.image_url or None,
-        'external-url': user.spotify_basic_data.external_url or None,
-        'product': user.spotify_basic_data.product or None,
+        'id': user.session.session_key[-6:],
     }
+
+    try:
+        return participant.update({
+            'display_name': (
+                user.spotify_basic_data.display_name
+                if user.spotifyspotify_basic_data is not None
+                else None
+            ),
+            'image_url': (
+                user.spotify_basic_data.image_url
+                if user.spotifyspotify_basic_data is not None
+                else None
+            ),
+            'external-url': (
+                user.spotify_basic_data.external_url
+                if user.spotifyspotify_basic_data is not None
+                else None
+            ),
+            'product': (
+                user.spotify_basic_data.product
+                if user.spotifyspotify_basic_data is not None
+                else None
+            ),
+        })
+    except AttributeError:
+        return participant.update({
+            'display_name': None,
+            'image_url': None,
+            'external-url': None,
+            'product': None,
+        })
 
 
 def construct_participants(users: list[object]) -> list[dict]:
@@ -184,11 +208,8 @@ def construct_participants(users: list[object]) -> list[dict]:
     Returns:
         list[dict]: Cleanned list of user
     """
-    Parent = apps.get_model("user", "Users")
     participants = []
     for user in users:
-        if not isinstance(user, Parent):
-            raise TypeError("I need a user")
 
         participants.append(
             construct_participant(user)
