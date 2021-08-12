@@ -17,6 +17,6 @@ def is_host_required(func_method):
 def in_room_required(func_method):
     def is_in_room(parent_class, request):
         if request.user.room is None:
-            raise exceptions.NotFound("user not in room")
+            raise exceptions.ValidationError("user not in room")
         return func_method(parent_class, request)
     return is_in_room
