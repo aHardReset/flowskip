@@ -328,7 +328,7 @@ class StateManager(APIView):
 
             votes_in_db = [vote.user for vote in votes_in_db]
             votes_in_db = room_snippets.construct_participants(votes_in_db)
-            response['votes'] = room_snippets.calculate_dict_deltas(
+            response['votes_to_skip'] = room_snippets.calculate_dict_deltas(
                 votes_in_db,
                 votes_in_req,
                 gone=False
