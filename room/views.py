@@ -192,24 +192,24 @@ class StateManager(APIView):
         room_serializers.TrackIdSerializer(data=request.data).is_valid(raise_exception=True)
 
         if request.user.room.track_id is None:
-            return None, status.HTTP_410_GONE
+            return {}, status.HTTP_410_GONE
 
         current_playing_track = request.user.room.current_playing_track
         progress_ms = current_playing_track['progress_ms']
         duration_ms = current_playing_track['item']['duration_ms']
         if (progress_ms / duration_ms) * 100 > TOO_LATE:
-            return None, status.HTTP_410_GONE
+            return {}, status.HTTP_410_GONE
 
         room_votes = Votes.objects.filter(room=request.user.room).filter(action="SK")
         _ = room_votes.exclude(track_id=request.user.room.track_id).delete()
         if request.user.room.track_id != request.data['track_id']:
-            return None, status.HTTP_301_MOVED_PERMANENTLY
+            return {}, status.HTTP_301_MOVED_PERMANENTLY
 
         track_votes = room_votes.filter(track_id=request.data['track_id'])
         votes = track_votes.count()
         for user in track_votes.values('user'):
             if request.user.session.session_key == user['user']:
-                return None, status.HTTP_208_ALREADY_REPORTED
+                return {}, status.HTTP_208_ALREADY_REPORTED
         vote = Votes(
             room=request.user.room,
             user=request.user,
@@ -224,7 +224,7 @@ class StateManager(APIView):
             sp_api = spotify_api.api_manager(request.user.room.host.spotify_basic_data)
             sp_api.next_track()
             room_snippets.register_track_in_state("SK", request.user.room, current_playing_track)
-        return None, status.HTTP_201_CREATED
+        return {}, status.HTTP_201_CREATED
 
     def get(self, request, format=None):
         response = {}
