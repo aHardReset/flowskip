@@ -63,6 +63,11 @@ urlpatterns = [
         view=views.StateManager.as_view(),
         name='add-to-queue',
     ),
+    path(
+        'state/toggle-is-playing',
+        view=views.StateManager.as_view(),
+        name='toggle-is-playing',
+    ),
 ]
 
 urlpatterns = format_suffix_patterns(urlpatterns)

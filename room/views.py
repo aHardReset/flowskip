@@ -18,6 +18,7 @@ from flowskip.auths import UserAuthentication
 # Utilities
 from room import snippets as room_snippets
 from spotify import api as spotify_api
+from spotipy.exceptions import SpotifyException
 from room.decorators import is_host_required, in_room_required
 from spotify.decorators import is_authenticated_in_spotify_required
 
@@ -184,6 +185,9 @@ class StateManager(APIView):
         switch = resolve(request.path).url_name.lower()
         if switch == 'vote-to-skip':
             response, status_code = self._post_vote_to_skip(request)
+        else:
+            response['detail'] = f'Bad request: {switch}'
+            status_code = status.HTTP_400_BAD_REQUEST
         return Response(response, status=status_code)
 
     @staticmethod
@@ -351,7 +355,24 @@ class StateManager(APIView):
 
     @in_room_required
     def put(self, request, format=None):
-        room_serializers.AddToQueueSerializer(data=request.data).is_valid(raise_exception=True)
+        response = {}
+        room_serializers.CodeSerializer(data=request.data).is_valid(raise_exception=True)
+        if not request.user.room.code == request.data['code']:
+            response['detail'] = 'Room code does not match'
+            return Response(response, status=status.HTTP_426_UPGRADE_REQUIRED)
+
+        switch = resolve(request.path).url_name.lower()
+        if switch == 'add-to-queue':
+            response, status_code = self._put_add_to_queue(request)
+        elif switch == 'toggle-is-playing':
+            response, status_code = self._put_toggle_is_playing(request)
+        else:
+            response['detail'] = f'Bad request: {switch}'
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(response, status=status_code)
+
+    @staticmethod
+    def _put_add_to_queue(request):
         recommended_tracks = TracksState.objects.filter(
             room=request.user.room
         ).filter(
@@ -361,13 +382,28 @@ class StateManager(APIView):
             query['track_id']
             for query
             in recommended_tracks.values("track_id"))
+
         if not request.data['track_id'] in recommended_tracks_ids and not request.user.is_host:
             raise exceptions.NotFound("track_id not recommended")
-        sp_api_tunel = spotify_api.api_manager(request.user.room.host.spotify_basic_data)
-        sp_api_tunel.add_to_queue(request.data['track_id'])
+        sp_api_tunnel = spotify_api.api_manager(request.user.room.host.spotify_basic_data)
+        sp_api_tunnel.add_to_queue(request.data['track_id'])
         deleted_recommended_track = recommended_tracks.filter(track_id=request.data['track_id'])
-        to_queue = deleted_recommended_track.values()[0]
-        _ = deleted_recommended_track.delete()
+
+        if deleted_recommended_track.exists():
+            to_queue = deleted_recommended_track.values()[0]
+            _ = deleted_recommended_track.delete()
+        else:
+            track_info = sp_api_tunnel.track(request.data['track_id'])
+            to_queue = {}
+            to_queue['uri'] = track_info['uri']
+            to_queue['name'] = track_info['name']
+            to_queue['album_name'] = track_info['album']['name']
+            to_queue['album_image_url'] = track_info['album']['images'][0]['url']
+            to_queue['track_id'] = track_info['id']
+            to_queue['artists_str'] = ', '.join([
+                artist['name'] for artist in track_info['artists']
+            ])
+            to_queue['external_url'] = track_info['external_urls']['spotify']
 
         uri = to_queue['uri']
         name = to_queue['name']
@@ -411,4 +447,35 @@ class StateManager(APIView):
                 state="QU",
             )
             track.save()
-        return Response({}, status=status.HTTP_201_CREATED)
+        return {}, status.HTTP_201_CREATED
+
+    @staticmethod
+    def _put_toggle_is_playing(request):
+        response = {}
+        room_serializers.TrackIdSerializer(data=request.data).is_valid(raise_exception=True)
+        if (
+            (
+                not request.user.room.track_id == request.data['track_id']
+                or request.user.room.track_id is not None
+            )
+            and not request.user.is_host
+        ):
+            response['detail'] = 'track_id does not match'
+            return response, status.HTTP_426_UPGRADE_REQUIRED
+
+        if request.user.session.session_key != request.user.room.host.session.session_key:
+            if not request.user.room.guests_can_pause:
+                response['detail'] = "Pause for guests not allowed"
+                return response, status.HTTP_403_FORBIDDEN
+
+        sp_api_tunnel = spotify_api.api_manager(request.user.room.host.spotify_basic_data)
+        try:
+            sp_api_tunnel.pause_playback()
+        except SpotifyException:
+            try:
+                sp_api_tunnel.start_playback()
+            except SpotifyException:
+                response['detail'] = 'Unable to toggle. Maybe Spotify API down \
+                    are you sure that host is premium? (update user details)'
+
+        return response, status.HTTP_200_OK
