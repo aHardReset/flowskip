@@ -471,11 +471,14 @@ class StateManager(APIView):
         sp_api_tunnel = spotify_api.api_manager(request.user.room.host.spotify_basic_data)
         try:
             sp_api_tunnel.pause_playback()
+            status_code = status.HTTP_200_OK
         except SpotifyException:
             try:
                 sp_api_tunnel.start_playback()
+                status_code = status.HTTP_200_OK
             except SpotifyException:
                 response['detail'] = 'Unable to toggle. Maybe Spotify API down \
                     are you sure that host is premium? (update user details)'
+                status_code = status.HTTP_403_FORBIDDEN
 
-        return response, status.HTTP_200_OK
+        return response, status_code
