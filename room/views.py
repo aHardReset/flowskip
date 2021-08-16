@@ -2,6 +2,7 @@
 from django.urls import resolve
 from django.utils import timezone
 from django.core.exceptions import ObjectDoesNotExist
+from django.forms.models import model_to_dict
 
 # Rest Framework
 from rest_framework import exceptions, status
@@ -35,6 +36,10 @@ class RoomManager(APIView):
         response = room_serializers.RoomInfoSerializer(request.user.room).data
         host_seesion_key = request.user.room.host.session.session_key
         user_session_key = request.user.session.session_key
+        response['host'] = model_to_dict(
+            request.user.room.host.spotify_basic_data,
+            fields=['id', 'display_name', 'uri', 'image_url', 'external_url']
+        )
         response['user_is_host'] = host_seesion_key == user_session_key
         return Response(response, status=status.HTTP_200_OK)
 
@@ -315,35 +320,32 @@ class StateManager(APIView):
 
         participants_in_req = request.data.get('participants')
         if type(participants_in_req) is list:
-            participants_in_db = user_models.Users.objects.filter(room=room)
-            participants_in_db = room_snippets.construct_participants(participants_in_db)
+            participants_in_db = room_snippets.construct_participants(
+                user_models.Users.objects.filter(room=room)
+            )
             response['participants'] = room_snippets.calculate_dict_deltas(
                 participants_in_db,
                 participants_in_req
             )
-
         votes_in_req = request.data.get('votes')
         if type(votes_in_req) is list:
-            votes_in_db = Votes.objects.filter(
-                room=room
-            ).filter(track_id=room.track_id).filter(
-                action="SK"
-            )
-
-            votes_in_db = [vote.user for vote in votes_in_db]
-            votes_in_db = room_snippets.construct_participants(votes_in_db)
+            votes_in_db = room_snippets.construct_participants([
+                vote.user
+                for vote
+                in Votes.objects.filter(room=room)
+                .filter(track_id=room.track_id).filter(action="SK")
+            ])
             response['votes_to_skip'] = room_snippets.calculate_dict_deltas(
                 votes_in_db,
                 votes_in_req,
                 gone=False
             )
-
         queue_in_req = request.data.get('queue')
         if type(queue_in_req) is list:
-            queue_in_db = TracksState.objects.filter(room=room).filter(state="QU")
             queue_in_db = [
                 dict(TracksStateSerializer(i).data)
-                for i in queue_in_db
+                for i
+                in TracksState.objects.filter(room=room).filter(state="QU")
             ]
             response['queue'] = room_snippets.calculate_dict_deltas(
                 queue_in_db,
@@ -477,8 +479,9 @@ class StateManager(APIView):
                 sp_api_tunnel.start_playback()
                 status_code = status.HTTP_200_OK
             except SpotifyException:
-                response['detail'] = 'Unable to toggle. Maybe Spotify API down \
-                    are you sure that host is premium? (update user details)'
+                response['detail'] = 'Unable to toggle. Maybe Spotify API down. ' \
+                    'Or spotify device not started. ' \
+                    'Make sure that host is premium (update user details)'
                 status_code = status.HTTP_403_FORBIDDEN
 
         return response, status_code

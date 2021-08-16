@@ -165,35 +165,36 @@ def construct_participant(user: object) -> dict:
     }
 
     try:
-        return participant.update({
+        participant.update({
             'display_name': (
                 user.spotify_basic_data.display_name
-                if user.spotifyspotify_basic_data is not None
+                if user.spotify_basic_data is not None
                 else None
             ),
             'image_url': (
                 user.spotify_basic_data.image_url
-                if user.spotifyspotify_basic_data is not None
+                if user.spotify_basic_data is not None
                 else None
             ),
-            'external-url': (
+            'external_url': (
                 user.spotify_basic_data.external_url
-                if user.spotifyspotify_basic_data is not None
+                if user.spotify_basic_data is not None
                 else None
             ),
-            'product': (
-                user.spotify_basic_data.product
-                if user.spotifyspotify_basic_data is not None
+            'uri': (
+                user.spotify_basic_data.uri
+                if user.spotify_basic_data is not None
                 else None
             ),
         })
     except AttributeError:
-        return participant.update({
+        participant.update({
             'display_name': None,
             'image_url': None,
-            'external-url': None,
-            'product': None,
+            'external_url': None,
+            'uri': None,
         })
+    return participant
 
 
 def construct_participants(users: list[object]) -> list[dict]:
