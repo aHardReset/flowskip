@@ -7,7 +7,6 @@ from rest_framework import status
 from room import serializers as room_serializers
 from room.decorators import in_room_required, is_host_required
 from flowskip.auths import UserAuthentication
-from spotify.decorators import is_authenticated_in_spotify_required
 from spotify import api as spotify_api
 from spotipy.exceptions import SpotifyException
 
@@ -41,7 +40,7 @@ class PlayerManager(APIView):
         room_serializers.CodeSerializer(data=request.data).is_valid(raise_exception=True)
         if not request.user.room.code == request.data['code']:
             return Response(response, status=status.HTTP_426_UPGRADE_REQUIRED)
-        
+
         switch = resolve(request.path).url_name.lower()
         if switch == 'next-track':
             pass
@@ -60,7 +59,7 @@ class PlayerManager(APIView):
         else:
             response['detail'] = f'Bad request: {switch}'
             status_code = status.HTTP_400_BAD_REQUEST
-        
+
         return Response(response, status=status_code)
 
     @in_room_required

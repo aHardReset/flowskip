@@ -75,7 +75,7 @@ urlpatterns = format_suffix_patterns(urlpatterns)
 urlpatterns.append(
     # Player
     path(
-        'state/player/',
+        'player/',
         include(('room.player.urls', 'player'), namespace='player')
     )
 )
