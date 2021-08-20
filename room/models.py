@@ -18,7 +18,7 @@ class Rooms(models.Model):
         primary_key=True
     )
 
-    # Room onfiguration
+    # Room configuration
     code = models.CharField(
         max_length=16,
         blank=False,

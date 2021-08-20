@@ -1,7 +1,7 @@
 """flowskip.room URL Configuration"""
 
 # Django
-from django.urls import path
+from django.urls import path, include
 from rest_framework.urlpatterns import format_suffix_patterns
 
 # Views
@@ -71,3 +71,11 @@ urlpatterns = [
 ]
 
 urlpatterns = format_suffix_patterns(urlpatterns)
+
+urlpatterns.append(
+    # Player
+    path(
+        'player/',
+        include(('room.player.urls', 'player'), namespace='player')
+    )
+)

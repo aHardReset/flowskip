@@ -11,11 +11,9 @@ from rest_framework.response import Response
 
 # Models
 from room import serializers as room_serializers
-from room.serializers import TracksStateSerializer
 from room.models import Rooms, TracksState, Votes
 from user import models as user_models
 from flowskip.auths import UserAuthentication
-
 # Utilities
 from room import snippets as room_snippets
 from spotify import api as spotify_api
@@ -258,25 +256,25 @@ class StateManager(APIView):
         # return [dict(Serializer(i).data) for i in query]
         query = TracksState.objects.filter(room=room).filter(state="SU")
         response['success_tracks'] = [
-            dict(TracksStateSerializer(i).data)
+            dict(room.serializers.TracksStateSerializer(i).data)
             for i
             in query
         ]
         query = TracksState.objects.filter(room=room).filter(state="SK")
         response['skipped_tracks'] = [
-            dict(TracksStateSerializer(i).data)
+            dict(room.serializers.TracksStateSerializer(i).data)
             for i
             in query
         ]
         query = TracksState.objects.filter(room=room).filter(state="RE")
         response['recommended_tracks'] = [
-            dict(TracksStateSerializer(i).data)
+            dict(room.serializers.TracksStateSerializer(i).data)
             for i
             in query
         ]
         query = TracksState.objects.filter(room=room).filter(state="QU")
         response['queue_tracks'] = [
-            dict(TracksStateSerializer(i).data)
+            dict(room.serializers.TracksStateSerializer(i).data)
             for i in query
         ]
         return response, status.HTTP_200_OK
@@ -343,7 +341,7 @@ class StateManager(APIView):
         queue_in_req = request.data.get('queue')
         if type(queue_in_req) is list:
             queue_in_db = [
-                dict(TracksStateSerializer(i).data)
+                dict(room.serializers.TracksStateSerializer(i).data)
                 for i
                 in TracksState.objects.filter(room=room).filter(state="QU")
             ]

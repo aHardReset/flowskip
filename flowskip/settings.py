@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     # My apps
     'user',
     'room',
+    'room.player',
     'spotify',
 ]
 
