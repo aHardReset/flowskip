@@ -21,7 +21,7 @@ from spotipy.exceptions import SpotifyException
 from room.decorators import is_host_required, in_room_required
 from spotify.decorators import is_authenticated_in_spotify_required
 
-TOO_LATE = 50
+TOO_LATE = 98
 
 
 class RoomManager(APIView):
@@ -256,25 +256,25 @@ class StateManager(APIView):
         # return [dict(Serializer(i).data) for i in query]
         query = TracksState.objects.filter(room=room).filter(state="SU")
         response['success_tracks'] = [
-            dict(room.serializers.TracksStateSerializer(i).data)
+            dict(room_serializers.TracksStateSerializer(i).data)
             for i
             in query
         ]
         query = TracksState.objects.filter(room=room).filter(state="SK")
         response['skipped_tracks'] = [
-            dict(room.serializers.TracksStateSerializer(i).data)
+            dict(room_serializers.TracksStateSerializer(i).data)
             for i
             in query
         ]
         query = TracksState.objects.filter(room=room).filter(state="RE")
         response['recommended_tracks'] = [
-            dict(room.serializers.TracksStateSerializer(i).data)
+            dict(room_serializers.TracksStateSerializer(i).data)
             for i
             in query
         ]
         query = TracksState.objects.filter(room=room).filter(state="QU")
         response['queue_tracks'] = [
-            dict(room.serializers.TracksStateSerializer(i).data)
+            dict(room_serializers.TracksStateSerializer(i).data)
             for i in query
         ]
         return response, status.HTTP_200_OK
@@ -341,7 +341,7 @@ class StateManager(APIView):
         queue_in_req = request.data.get('queue')
         if type(queue_in_req) is list:
             queue_in_db = [
-                dict(room.serializers.TracksStateSerializer(i).data)
+                dict(room_serializers.TracksStateSerializer(i).data)
                 for i
                 in TracksState.objects.filter(room=room).filter(state="QU")
             ]

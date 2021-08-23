@@ -161,7 +161,7 @@ def construct_participant(user: object) -> dict:
     """
     participant = {
         'is_authenticated': True if user.spotify_basic_data else False,
-        'id': user.session.session_key[-6:],
+        'id': user.spotify_basic_data.id if user.spotify_basic_data else user.session.session_key[-6:],
     }
 
     try:
