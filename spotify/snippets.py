@@ -1,3 +1,7 @@
+import re
+from typing import Callable, Tuple, NamedTuple
+from spotipy import SpotifyException
+from rest_framework import status
 from urllib import parse
 
 ALLOWED_REDIRECTS = ['http://localhost:300']
@@ -60,3 +64,44 @@ def update_db_tokens(spotify_basic_data: object, new_tokens: dict) -> object:
         'access_token_expires_at'
     ])
     return spotify_basic_data
+
+
+def spotify_action(action: Callable, success_code, **kwargs):
+    response = {}
+    try:
+        response = action(**kwargs)
+        if response == "" or response is None:
+            response = {}
+        status_code = success_code
+    except SpotifyException as e:
+        response['detail'] = F"spotify has returned an error: '{e}'"
+        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    return response, status_code
+
+
+def spotify_action_handler(
+    actions_names: Tuple[str],
+    actions_definitions: NamedTuple,
+    action: str,
+    body: dict,
+) -> Tuple[dict, int]:
+    response = {}
+    actions = dict(
+        (action_name, action_value)
+        for action_name, action_value
+        in zip(actions_names, actions_definitions)
+    )
+    try:
+        response, status_code = spotify_action(
+            action=actions[action].callable,
+            success_code=actions[action].success_code,
+            **body
+        )
+    except KeyError:
+        response = 'Request valid but not available yet'
+        status_code = status.HTTP_501_NOT_IMPLEMENTED
+    except TypeError as e:
+        e = re.sub(r'[ -~]+\(+\)', 'Bad request:', str(e))
+        response['detail'] = e
+        status_code = status.HTTP_400_BAD_REQUEST
+    return response, status_code

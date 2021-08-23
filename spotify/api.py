@@ -17,6 +17,8 @@ scopes = [
     'user-modify-playback-state',
     'user-read-playback-state',
     'user-read-private',
+    'playlist-modify-public',
+    'ugc-image-upload',
 ]
 SCOPE = " ".join(scopes)
 
