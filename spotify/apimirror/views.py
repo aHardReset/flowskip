@@ -19,6 +19,9 @@ spotify_authenticated_valid_actions['POST'] = (
 )
 
 is_host_valid_actions = dict()
+is_host_valid_actions['GET'] = (
+    'all-featured-playlists',
+)
 is_host_valid_actions['POST'] = (
     'next-track',
     'previous-track',
@@ -82,6 +85,38 @@ class ApiMirrorIsHostRequired(APIView):
     send to the apimirror"""
 
     authentication_classes = [UserAuthentication]
+
+    @in_room_required
+    @is_host_required
+    def get(self, request, format=None):
+        response = {}
+        room_serializers.CodeSerializer(data=request.data).is_valid(raise_exception=True)
+        if not request.user.room.code == request.data['code']:
+            raise exceptions.APIException(
+                detail="code for this room has changed",
+                code=status.HTTP_426_UPGRADE_REQUIRED
+            )
+        del(request.data['code'])
+
+        action = action_in_view_validation(
+            is_host_valid_actions,
+            resolve(request.path).url_name.lower(),
+            request.method
+        )
+
+        sp_api_tunnel = spotify_api.api_manager(request.user.room.host.spotify_basic_data)
+        actions_definitions = (
+            Action(sp_api_tunnel.featured_playlists, status.HTTP_204_NO_CONTENT),
+        )
+
+        response, status_code = spotify_action_handler(
+            actions_names=is_host_valid_actions[request.method],
+            actions_definitions=actions_definitions,
+            action=action,
+            body=request.data,
+        )
+
+        return Response(response, status=status_code)
 
     @in_room_required
     @is_host_required

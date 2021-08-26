@@ -152,6 +152,7 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"http://127.0.0.1:*",
     r"https://flowskip.com*",
     r"https://flowskip-4-web.herokuapp.com/*",
+    r"http://192.168.*",
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
