@@ -456,7 +456,7 @@ class StateManager(APIView):
         if (
             (
                 not request.user.room.track_id == request.data['track_id']
-                or request.user.room.track_id is not None
+                or request.user.room.track_id is None
             )
             and not request.user.is_host
         ):
