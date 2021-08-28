@@ -463,7 +463,7 @@ class StateManager(APIView):
             response['detail'] = 'track_id does not match'
             return response, status.HTTP_426_UPGRADE_REQUIRED
 
-        if request.user.session.session_key != request.user.room.host.session.session_key:
+        if not request.user.is_host:
             if not request.user.room.guests_can_pause:
                 response['detail'] = "Pause for guests not allowed"
                 return response, status.HTTP_403_FORBIDDEN
@@ -476,10 +476,11 @@ class StateManager(APIView):
             try:
                 sp_api_tunnel.start_playback()
                 status_code = status.HTTP_200_OK
-            except SpotifyException:
+            except SpotifyException as e:
                 response['detail'] = 'Unable to toggle. Maybe Spotify API down. ' \
                     'Or spotify device not started. ' \
-                    'Make sure that host is premium (update user details)'
+                    'Make sure that host is premium (update user details) ' \
+                    f'Error: {e}'
                 status_code = status.HTTP_403_FORBIDDEN
 
         return response, status_code
