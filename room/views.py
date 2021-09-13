@@ -252,7 +252,7 @@ class StateManager(APIView):
         try:
             room = Rooms.objects.get(code=request.GET['code'])
         except ObjectDoesNotExist:
-            return Response(response, status=status.HTTP_200_OK)
+            return Response(response, status=status.HTTP_404_NOT_FOUND)
         # return [dict(Serializer(i).data) for i in query]
         query = TracksState.objects.filter(room=room).filter(state="SU")
         response['success_tracks'] = [

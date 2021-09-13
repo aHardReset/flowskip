@@ -22,11 +22,14 @@ def update_recommended_tracks(sender, instance, created, **kwargs):
     """
 
     if created and instance.state == "SU":
-        TracksState = apps.get_model("room", "TracksState")
-        _ = TracksState.objects.filter(room=instance.room).filter(state="RE").delete()
-        success_tracks = sender.objects.all()
+        # delete all recommended tracks
+        _ = sender.objects.filter(room=instance.room).filter(state="RE").delete()
+        # updating recommended tracks
+        success_tracks = sender.objects.filter(room=instance.room).filter(state="SU")
         if success_tracks.count() > 5:
             success_tracks = success_tracks.order_by('-id')[:5]
+        else:
+            success_tracks = success_tracks.order_by('-id')
 
         seed_tracks = [
             success_track.track_id
@@ -37,10 +40,13 @@ def update_recommended_tracks(sender, instance, created, **kwargs):
         ap_api = spotify_api.api_manager(instance.room.host.spotify_basic_data)
         recommendations = ap_api.recommendations(
             seed_tracks=seed_tracks,
-            limit=10
+            limit=20
         )
+        skipped_tracks = sender.objects.filter(room=instance.room).filter(state="SK")
         for recommendation in recommendations['tracks']:
-            save_track_in_state("RE", instance.room, recommendation)
+            track_id = recommendation['id']
+            if not skipped_tracks.filter(track_id=track_id).exists():
+                save_track_in_state("RE", instance.room, recommendation)
 
 # Not implemented method, originally the api doesn't allow delete this tracks
 # But in a room that can be used in several days maybe this could work
