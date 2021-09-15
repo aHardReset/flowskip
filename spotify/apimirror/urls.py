@@ -21,4 +21,14 @@ urlpatterns.extend([
     for urlpattern
     in urlpatterns_endpoints
 ])
+
+urlpatterns_endpoints = list()
+for valid_endpoint in views.in_room_valid_actions.values():
+    urlpatterns_endpoints.extend(valid_endpoint)
+urlpatterns.extend([
+    construct_common_path(endpoint=urlpattern, view_class=views.ApiMirrorInRoomRequired)
+    for urlpattern
+    in urlpatterns_endpoints
+])
+
 urlpatterns = format_suffix_patterns(urlpatterns)

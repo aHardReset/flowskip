@@ -1,7 +1,7 @@
 import re
 from typing import Callable, Tuple, NamedTuple
 from spotipy import SpotifyException
-from rest_framework import status
+from rest_framework import status, exceptions
 from urllib import parse
 
 ALLOWED_REDIRECTS = ['http://localhost:300']
@@ -75,7 +75,7 @@ def spotify_action(action: Callable, success_code, **kwargs):
         status_code = success_code
     except SpotifyException as e:
         response['detail'] = F"spotify has returned an error: '{e}'"
-        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        raise exceptions.APIException(response, status.HTTP_500_INTERNAL_SERVER_ERROR)
     return response, status_code
 
 
@@ -98,7 +98,7 @@ def spotify_action_handler(
             **body
         )
     except KeyError:
-        response = 'Request valid but not available yet'
+        response['detail'] = 'Request valid but not available yet'
         status_code = status.HTTP_501_NOT_IMPLEMENTED
     except TypeError as e:
         e = re.sub(r'[ -~]+\(+\)', 'Bad request:', str(e))
